@@ -7,7 +7,7 @@ It orchestrates the whole pipeline:
   2. Calls `src.train.train_model`.
   3. Evaluates the trained model via `src.evaluate.evaluate`.
   4. Generates a PDF figure with training/validation curves and stores it in
-     `.research/iteration18/images` as mandated.
+     `.research/iteration19/images` as mandated.
   5. Writes a small summary of the results to *stdout*.
 
 The code purposefully avoids any external dependencies beyond the ones listed
@@ -59,8 +59,10 @@ print(json.dumps({"test_accuracy": acc}))
 # -----------------------------------------------------------------------------
 # 3) Visualisation – save as PDF for publication quality
 # -----------------------------------------------------------------------------
-img_dir = Path(".research/iteration18/images")
+# All images must be stored under `.research/iteration19/images` as required.
+img_dir = Path(".research/iteration19/images")
 img_dir.mkdir(parents=True, exist_ok=True)
+
 plt.figure(figsize=(6, 3))
 plt.plot(train_losses, label="Train loss")
 plt.plot(val_losses, label="Validation loss")
@@ -68,6 +70,11 @@ plt.xlabel("Epoch")
 plt.ylabel("Cross-entropy loss")
 plt.legend()
 plt.tight_layout()
+
 fig_path = img_dir / "mnist_loss_curves.pdf"
 plt.savefig(fig_path, dpi=300, bbox_inches="tight")
-print(f"[INFO] Training curves saved → {fig_path.relative_to(Path('.').resolve())}")
+
+# The previous implementation attempted to use Path.relative_to with a mixture
+# of absolute/relative paths, which raises `ValueError`.  Instead, we simply
+# print the (relative) POSIX path that we know lives inside the project tree.
+print(f"[INFO] Training curves saved → {fig_path.as_posix()}")
