@@ -1,0 +1,4 @@
+/home/runner/work/experiment_matsuzawa_20250901/experiment_matsuzawa_20250901/src/train.py:217: FutureWarning: `torch.cuda.amp.GradScaler(args...)` is deprecated. Please use `torch.amp.GradScaler('cuda', args...)` instead.
+  scaler = GradScaler()
+usage: main.py [-h] --exp {1,2,3} [--subexp {vision,nlp}] [--seed SEED]
+main.py: error: the following arguments are required: --exp
