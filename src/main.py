@@ -20,7 +20,7 @@ from . import preprocess, train, evaluate
 ROOT = Path(__file__).resolve().parent.parent
 
 # Save images to the requested directory
-IMG_DIR = ROOT / ".research" / "iteration22" / "images"
+IMG_DIR = ROOT / ".research" / "iteration23" / "images"
 IMG_DIR.mkdir(parents=True, exist_ok=True)
 
 MODELS_DIR = ROOT / "models"

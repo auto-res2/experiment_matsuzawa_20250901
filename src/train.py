@@ -73,8 +73,10 @@ def train(env: gym.Env, cfg: Dict, models_dir: Path) -> Tuple[Path, List[float]]
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.n
 
+    # Ensure the learning rate is a float – YAML may parse it as a string
+    lr: float = float(cfg["lr"])
     policy = PolicyNet(obs_dim, act_dim).to(device)
-    optimizer = torch.optim.Adam(policy.parameters(), lr=cfg["lr"])
+    optimizer = torch.optim.Adam(policy.parameters(), lr=lr)
 
     reward_history: List[float] = []
     start = time.time()
