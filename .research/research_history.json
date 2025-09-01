@@ -680,6 +680,68 @@
       }
     }
   ],
+  "reference_research_study_list": [
+    {
+      "title": "Denoising diffusion probabilistic models"
+    },
+    {
+      "title": "Score-based generative modeling through stochastic differential equations"
+    },
+    {
+      "title": "Diffusion models beat gans on image synthesis"
+    },
+    {
+      "title": "Classifier-free diffusion guidance"
+    },
+    {
+      "title": "Dual diffusion implicit bridges for image-to-image translation"
+    },
+    {
+      "title": "Palette: Image-to-image diffusion models"
+    },
+    {
+      "title": "Egsde: Unpaired image-to-image translation via energy-guided stochastic differential equations"
+    },
+    {
+      "title": "High-resolution image synthesis with latent diffusion models"
+    },
+    {
+      "title": "Zero-shot text-to-image generation"
+    },
+    {
+      "title": "Glide: Towards photorealistic image generation and editing with text-guided diffusion models"
+    },
+    {
+      "title": "Solving inverse problems with latent diffusion models via hard data consistency"
+    },
+    {
+      "title": "Diffusion posterior sampling for general noisy inverse problems"
+    },
+    {
+      "title": "Solving inverse problems in medical imaging with score-based generative models"
+    },
+    {
+      "title": "Diffusion-based adversarial purification for robust deep mri reconstruction"
+    },
+    {
+      "title": "Imagen video: High definition video generation with diffusion models"
+    },
+    {
+      "title": "Flexible diffusion modeling of long videos"
+    },
+    {
+      "title": "The emergence of reproducibility and consistency in diffusion models"
+    },
+    {
+      "title": "Elucidating the design space of diffusion-based generative models"
+    },
+    {
+      "title": "Perception prioritized training of diffusion models"
+    },
+    {
+      "title": "Addressing negative transfer in diffusion models"
+    }
+  ],
   "new_method": {
     "method": "Open Problems: Despite a flurry of recent work (multi-stage / multi-decoder, wavelet or dimensionality-varying forward processes, early-exiting, optimised ODE steppers, quantisation, etc.), current hierarchical diffusion models still execute a *fixed amount of decoder computation at every spatial location and every scheduled time-step*. In practice most pixels (or wavelet sub-bands / latent tokens) become easy to predict much earlier than the last stage, yet full-resolution decoders keep running, wasting the majority of FLOPs. Existing early-exit methods only drop whole network blocks uniformly across the image and ignore the rich *spatio-temporal* heterogeneity of uncertainty that naturally arises in hierarchical diffusion. A key unsolved challenge is therefore:\nHow to *dynamically allocate compute both across stages and across spatial regions* so that the model spends effort only where residual uncertainty justifies it, while retaining high-fidelity generation.\nMethods: Dynamic Hierarchical Adaptive Computation (DHAC).\n1. Base model: start from a multi-stage / multi-decoder UNet (e.g. Wang et al. 2023) trained with a VP-SDE schedule.\n2. Uncertainty Predictor: attach a light head to each decoder stage that outputs per-tile uncertainty maps U_t (e.g. 8×8 tiles for 256×256 images). The head is trained with a self-supervised objective (variance of score prediction or KL between stage-t and stage-t−1 denoisers).\n3. Spatio-Temporal Gating:\n   • Temporal: for each global time-step t, if mean(U_t) < θ_time we early-exit that *stage* and directly jump to the next scheduled t* using a higher-order DPM-solver update.\n   • Spatial: within a stage we prune decoder blocks on tiles whose uncertainty < θ_space by (a) feature caching, or (b) low-rank adapter that re-uses previous stage features.\n   • Thresholds θ are not hand-crafted: we learn a small policy network π(U_t, t) that outputs binary gates by minimising a loss  L = FID + λ·(FLOPs / budget) using REINFORCE with FLOP penalty or Gumbel-Softmax.\n4. Coarse-to-Fine Consistency: skipped tiles inherit colour via nearest-neighbour or wavelet LL-band; a consistency loss (ℓ1 in wavelet domain) ensures boundaries stay seamless.\n5. Training protocol: (i) pre-train standard hierarchical model; (ii) freeze main weights and train gating policy for ~10k steps on synthetic noise batches; (iii) optional joint fine-tune.\n6. Implementation leverages torch.fx to insert tile-wise masks and CUDA-kernel friendly block-sparse convolutions; falls back to dense ops when mask ratio >0.8.\nDifferences to prior work: early-exit is *content-adaptive & spatially local*, uses learned policy rather than manual schedule, and integrates seamlessly with hierarchical frequency / latent decompositions.\nExperimental Setup: Datasets & resolutions:\n• CIFAR-10 32×32 (fast sanity), ImageNet-64, CelebA-HQ 256, LSUN-Church 256.\nBaselines:\n1. Original multi-decoder UNet (3-stage) with 18-step DPM-Solver.\n2. Same + ASE early-exit (global).\n3. Wavelet Diffusion model.\nMetrics:\n• Quality: FID (50k samples), sFID, CLIP-score (conditional), diversity (Recall).\n• Efficiency: wall-clock sampling time (A100), #FLOPs, energy (nvidia-smi), peak memory.\nProtocols:\n• Compare at equal FID (~2.5% tolerance) and report speed-up.\n• Compute-quality Pareto curves by varying λ in FLOP penalty.\n• Ablations: (i) only temporal gating, (ii) only spatial gating, (iii) learned vs fixed thresholds, (iv) tile size sensitivity.\n• Robustness: evaluate under classifier-free guidance scales 1–7.5, and under heavy quantisation (4-bit weights) to show orthogonality.\n• Generalisation: fine-tune DHAC policy trained on ImageNet-64 to CelebA-HQ without retraining gates.\nResult: Expected: \n• DHAC achieves 2-3× FLOP reduction and 1.8-2.5× wall-clock speed-up over baseline hierarchical diffusion at the same FID; outperforms ASE by ~35 % additional speed at equal quality.\n• Spatial gating alone saves ~45 % FLOPs; temporal gating another ~30 %; combined is multiplicative.\n• Pareto curve shows graceful degradation: at 4× speed-up FID increases by <0.4.\n• Gates correlate with human-perceived detail: flat backgrounds pruned early, faces & edges keep compute.\n• Method remains effective under guidance scales; variance <0.3 FID across scales.\n• Adds <1 % parameters, negligible training overhead (policy converges in <8 GPU-hours).\nConclusion: DHAC demonstrates that fine-grained, learned spatio-temporal compute allocation can unlock large untapped efficiency gains in hierarchical diffusion models without architectural overhauls. By turning the fixed decoding pipeline into an adaptive one, DHAC bridges the gap between algorithmic accelerations (ODE solvers, wavelets) and hardware-friendly sparsity, yielding a practical path toward real-time high-resolution generation on commodity GPUs and mobile NPUs. Future work: combine with mixed-precision quantisation for further savings, extend uncertainty-guided gating to video diffusion along temporal axis, and develop theoretical bounds on adaptive solver stability.",
     "experimental_design": {
