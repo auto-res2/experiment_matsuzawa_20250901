@@ -18,10 +18,19 @@ from . import preprocess, train, evaluate
 
 # --------------------------------------------------------------------------------------
 ROOT = Path(__file__).resolve().parent.parent
-IMG_DIR = ROOT / ".research" / "iteration21" / "images"
+
+# Save images to the requested directory
+IMG_DIR = ROOT / ".research" / "iteration22" / "images"
 IMG_DIR.mkdir(parents=True, exist_ok=True)
+
 MODELS_DIR = ROOT / "models"
-CONFIG_FILE = ROOT / "config" / "cartpole.yaml"
+
+# Robustly find the configuration file – fall back if the preferred name is missing
+CONFIG_DIR = ROOT / "config"
+if (CONFIG_DIR / "cartpole.yaml").exists():
+    CONFIG_FILE = CONFIG_DIR / "cartpole.yaml"
+else:
+    CONFIG_FILE = CONFIG_DIR / "config.yaml"
 
 
 def main():
