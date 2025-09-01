@@ -1,0 +1,29 @@
+Warning: Gym version v0.24.1 has a number of critical issues with `gym.make` such that the `reset` and `step` functions are called before returning the environment. It is recommend to downgrading to v0.23.1 or upgrading to v0.25.1
+Additionally, Gym has been unmaintained since 2022 and does not support NumPy 2.0 amongst other critical functionality.
+Please upgrade to Gymnasium, the maintained drop-in replacement of Gym, or contact the authors of your software and request that they upgrade.
+See the migration guide at https://gymnasium.farama.org/introduction/migration_guide/ for additional information.
+
+You appear to be missing MuJoCo.  We expected to find the file here: /home/runner/.mujoco/mujoco210
+
+This package only provides python bindings, the library must be installed separately.
+
+Please follow the instructions on the README to install MuJoCo
+
+    https://github.com/openai/mujoco-py#install-mujoco
+
+Which can be downloaded from the website
+
+    https://www.roboti.us/index.html
+
+/home/runner/work/experiment_matsuzawa_20250901/experiment_matsuzawa_20250901/src/train.py:132: DeprecationWarning: Conversion of an array with ndim > 0 to a scalar is deprecated, and will error in future. Ensure you extract a single element from your array before performing this operation. (Deprecated NumPy 1.25.)
+  action = int(np.clip(np.round(raw_action).astype(int), 0, env.action_space.n - 1))
+/home/runner/work/experiment_matsuzawa_20250901/experiment_matsuzawa_20250901/src/main.py:207: FutureWarning: 
+
+Passing `palette` without assigning `hue` is deprecated and will be removed in v0.14.0. Assign the `x` variable to `hue` and set `legend=False` for the same effect.
+
+  ax = sns.barplot(data=df, x="model", y="speed_up", palette="Blues_d")
+/home/runner/work/experiment_matsuzawa_20250901/experiment_matsuzawa_20250901/src/main.py:219: FutureWarning: 
+
+Passing `palette` without assigning `hue` is deprecated and will be removed in v0.14.0. Assign the `x` variable to `hue` and set `legend=False` for the same effect.
+
+  ax = sns.barplot(data=df, x="model", y="robust_success", palette="Greens_d")
