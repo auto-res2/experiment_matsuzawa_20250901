@@ -6,8 +6,8 @@ steps so that users can simply execute
 from the project root.
 
 All plots are saved as vector-graphics PDF in
-    .research/iteration5/images/
-as required by the instructions.
+    .research/iteration6/images/
+per the project instructions.
 """
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ from .evaluate import evaluate
 
 
 # -------------------------  Directories  ------------------------- #
-IMG_DIR = Path(".research/iteration5/images")
+IMG_DIR = Path(".research/iteration6/images")
 IMG_DIR.mkdir(parents=True, exist_ok=True)
 
 

@@ -57,6 +57,9 @@ class TrainConfig:
     hidden_size: int = 128
     seed: int = 42
     device: str = "cpu"
+    # Optional evaluation parameters (ignored by the trainer but accepted for
+    # convenience so the full YAML config can be passed without filtering).
+    eval_episodes: int = 20
 
 
 class ReinforceAgent:
