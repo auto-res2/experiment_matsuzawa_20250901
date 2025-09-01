@@ -1,0 +1,16 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/runner/work/experiment_matsuzawa_20250901/experiment_matsuzawa_20250901/src/main.py", line 41, in <module>
+    main()
+  File "/home/runner/work/experiment_matsuzawa_20250901/experiment_matsuzawa_20250901/src/main.py", line 29, in main
+    acc_test, _ = evaluate(model_path)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/experiment_matsuzawa_20250901/experiment_matsuzawa_20250901/src/evaluate.py", line 36, in evaluate
+    model.load_state_dict(checkpoint["model_state"])
+  File "/home/runner/work/_tool/Python/3.11.13/x64/lib/python3.11/site-packages/torch/nn/modules/module.py", line 2624, in load_state_dict
+    raise RuntimeError(
+RuntimeError: Error(s) in loading state_dict for IrisNet:
+	size mismatch for net.0.weight: copying a param with shape torch.Size([32, 4]) from checkpoint, the shape in current model is torch.Size([16, 4]).
+	size mismatch for net.0.bias: copying a param with shape torch.Size([32]) from checkpoint, the shape in current model is torch.Size([16]).
+	size mismatch for net.2.weight: copying a param with shape torch.Size([3, 32]) from checkpoint, the shape in current model is torch.Size([3, 16]).
