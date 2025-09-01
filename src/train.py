@@ -24,7 +24,7 @@ from .preprocess import DATA_DIR, maybe_prepare_data
 # Paths
 # -----------------------------------------------------------------------------
 MODELS_DIR = Path("models")
-IMAGES_DIR = Path(".research/iteration9/images")
+IMAGES_DIR = Path(".research/iteration10/images")  # ← updated per requirements
 CONFIG_PATH = Path("config/config.yaml")
 
 MODELS_DIR.mkdir(parents=True, exist_ok=True)
@@ -123,7 +123,7 @@ def train() -> Tuple[float, Path]:
     loss_fig_path = IMAGES_DIR / "training_loss.pdf"
     plt.savefig(loss_fig_path, bbox_inches="tight")
 
-    # Save model
+    # Save model (include config for downstream use)
     model_path = MODELS_DIR / "iris_net.pt"
     torch.save({"model_state": model.state_dict(), "cfg": cfg}, model_path)
     print(f"[train] model saved to {model_path.resolve()}")

@@ -2,7 +2,7 @@
 Project entry-point.  Run via
     python -m src.main
 The script orchestrates preprocessing, training, evaluation, and logs results
-with academic-quality PDF figures saved under .research/iteration9/images.
+with academic-quality PDF figures saved under .research/iteration10/images.
 """
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from .preprocess import maybe_prepare_data
 from .train import train
 from .evaluate import evaluate
 
-IMAGES_DIR = Path(".research/iteration9/images")
+IMAGES_DIR = Path(".research/iteration10/images")  # ← updated path
 IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 
 

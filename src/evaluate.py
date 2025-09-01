@@ -15,7 +15,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from .preprocess import DATA_DIR, maybe_prepare_data, TARGET_NAMES
+from .preprocess import maybe_prepare_data, TARGET_NAMES
 from .train import IrisNet, MODELS_DIR, IMAGES_DIR
 
 
@@ -32,7 +32,9 @@ def evaluate(model_path: Path | None = None) -> Tuple[float, Path]:
         model_path = MODELS_DIR / "iris_net.pt"
     checkpoint = torch.load(model_path, map_location="cpu")
 
-    model = IrisNet()
+    # Recreate network with the same hidden dimension that was used for training
+    hidden_dim: int = checkpoint.get("cfg", {}).get("hidden_dim", 16)
+    model = IrisNet(hidden_dim=hidden_dim)
     model.load_state_dict(checkpoint["model_state"])
     model.eval()
 
@@ -45,8 +47,15 @@ def evaluate(model_path: Path | None = None) -> Tuple[float, Path]:
 
     # plot confusion matrix
     plt.figure(figsize=(4, 3))
-    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", cbar=False,
-                xticklabels=TARGET_NAMES, yticklabels=TARGET_NAMES)
+    sns.heatmap(
+        cm,
+        annot=True,
+        fmt="d",
+        cmap="Blues",
+        cbar=False,
+        xticklabels=TARGET_NAMES,
+        yticklabels=TARGET_NAMES,
+    )
     plt.xlabel("Predicted")
     plt.ylabel("True")
     plt.title("Confusion Matrix")
