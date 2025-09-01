@@ -1,3 +1,4 @@
+
 """
 main.py
 Entry point. Run:  python -m src.main [--exp 1|2|3] ...
@@ -38,13 +39,15 @@ def experiment_1(args):
     if args.dataset == 'permuted_mnist':
         stream = PermutedMNISTStream(root="./data", batch_size=64, seed=args.seed)
         model = SimpleMLP(num_classes=10).to(device)
-        latent_dim = 256
     elif args.dataset == 'split_cifar100':
         stream = SplitCIFAR100Stream(root="./data", batch_size=64, seed=args.seed)
         model = ResNetFeatureWrapper(torchvision.models.resnet18(num_classes=100), num_classes=100).to(device)
-        latent_dim = 512
     else:
         raise ValueError("Unsupported dataset for demo code")
+
+    latent_dim = getattr(model, 'feature_dim', None)
+    if latent_dim is None:
+        raise RuntimeError("Model does not expose `feature_dim` attribute.")
 
     if args.method == 'hydra':
         buffer = HydraSketchBuffer(latent_dim=latent_dim, bitwidth=64, max_items=1000).to(device)
@@ -74,7 +77,7 @@ def experiment_2(args):
         set_seed(args.seed)
         stream = SplitCIFAR100Stream(root="./data", batch_size=64, seed=args.seed)
         model = ResNetFeatureWrapper(torchvision.models.resnet18(num_classes=100), num_classes=100).to(args.device)
-        latent_dim = 512
+        latent_dim = model.feature_dim
         buffer = HydraSketchBuffer(latent_dim, bitwidth=b, max_items=1000)
         decoder = AdaptiveDecoder(bitwidth=b, latent_dim=latent_dim).to(args.device)
         opt = torch.optim.SGD(model.parameters(), lr=0.1, momentum=0.9, weight_decay=5e-4)
@@ -116,7 +119,7 @@ def experiment_3(args):
     device = args.device
     stream = SplitCIFAR100Stream(root="./data", batch_size=64, seed=args.seed)
     model = ResNetFeatureWrapper(torchvision.models.resnet18(num_classes=100), num_classes=100).to(device)
-    latent_dim = 512
+    latent_dim = model.feature_dim
     buffer = HydraSketchBuffer(latent_dim, bitwidth=64, max_items=1000)
     decoder = AdaptiveDecoder(bitwidth=64, latent_dim=latent_dim).to(device)
     opt = torch.optim.SGD(model.parameters(), lr=0.1, momentum=0.9, weight_decay=5e-4)
@@ -157,6 +160,12 @@ def experiment_3(args):
     # Drift simulation – widen channels
     print("Applying channel-widening drift...")
     model.base = torchvision.models.resnet18(num_classes=100, width_per_group=64 * 2).to(device)
+    # Update feature_dim and classifier to match new backbone width
+    with torch.no_grad():
+        dummy = torch.zeros(1, 3, 32, 32, device=device)
+        new_dim = model._forward_to_layer_only(dummy).shape[1]
+    model.feature_dim = new_dim
+    model.classifier = torch.nn.Linear(new_dim, 100).to(device)
 
     # Fine-tune decoder briefly on buffer samples
     for _ in range(10):

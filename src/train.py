@@ -1,3 +1,4 @@
+
 """
 train.py
 Core training utilities, model components and HydraMemory buffers.
@@ -137,14 +138,29 @@ class AdaptiveDecoder(nn.Module):
 import torchvision
 
 class ResNetFeatureWrapper(nn.Module):
-    """Exposes forward_to_layer / from_layer around layer3 of ResNet-18."""
+    """Exposes forward_to_layer / from_layer around layer3 of ResNet-18.
+
+    We stop the network after `layer3` (instead of the full `layer4`) to obtain
+    a smaller  feature representation (256 dims for vanilla ResNet-18).  The
+    classifier layer dimensionality is inferred automatically so that the
+    wrapper remains valid even if the underlying backbone width changes (e.g.,
+    in drift experiments).
+    """
     def __init__(self, base: torchvision.models.ResNet, num_classes: int):
         super().__init__()
         self.base = base
+        # Remove the original FC head – we will add our own classifier.
         self.base.fc = nn.Identity()
-        self.classifier = nn.Linear(512, num_classes)
 
-    def forward_to_layer(self, x):
+        # Infer feature dimension after `layer3`.
+        with torch.no_grad():
+            dummy = torch.zeros(1, 3, 32, 32)
+            feat_dim = self._forward_to_layer_only(dummy).shape[1]
+        self.feature_dim: int = feat_dim
+        self.classifier = nn.Linear(self.feature_dim, num_classes)
+
+    # Internal helper used during construction (does *not* use self.classifier).
+    def _forward_to_layer_only(self, x):
         x = self.base.conv1(x)
         x = self.base.bn1(x)
         x = self.base.relu(x)
@@ -154,6 +170,10 @@ class ResNetFeatureWrapper(nn.Module):
         x = self.base.layer3(x)
         x = F.adaptive_avg_pool2d(x, 1).flatten(1)
         return x
+
+    # Public API
+    def forward_to_layer(self, x):
+        return self._forward_to_layer_only(x)
 
     def forward_from_layer(self, z):
         return self.classifier(z)
@@ -168,6 +188,8 @@ class SimpleMLP(nn.Module):
         self.fc1 = nn.Linear(in_dim, hidden)
         self.fc2 = nn.Linear(hidden, hidden)
         self.head = nn.Linear(hidden, num_classes)
+        # Expose representation size so that callers can infer it automatically.
+        self.feature_dim: int = hidden
 
     def forward_to_layer(self, x):
         x = x.view(x.size(0), -1)

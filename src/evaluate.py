@@ -1,3 +1,4 @@
+
 """
 evaluate.py
 Evaluation and plotting helpers.
@@ -13,9 +14,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # -----------------------------------------------------------------------------
-#  Figure directory – all images are stored under `.research/iteration4/images`
+#  Figure directory – all images are stored under `.research/iteration5/images`
 # -----------------------------------------------------------------------------
-FIG_DIR = Path(".research/iteration4/images")
+FIG_DIR = Path(".research/iteration5/images")
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 # -----------------------------------------------------------------------------
