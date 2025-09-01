@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/runner/work/experiment_matsuzawa_20250901/experiment_matsuzawa_20250901/src/main.py", line 76, in <module>
+    main()
+  File "/home/runner/work/experiment_matsuzawa_20250901/experiment_matsuzawa_20250901/src/main.py", line 72, in main
+    run_experiment(cfg)
+  File "/home/runner/work/experiment_matsuzawa_20250901/experiment_matsuzawa_20250901/src/main.py", line 43, in run_experiment
+    policy, stats = train(cfg)
+                    ^^^^^^^^^^
+  File "/home/runner/work/experiment_matsuzawa_20250901/experiment_matsuzawa_20250901/src/train.py", line 104, in train
+    cfg = TrainConfig(**cfg_dict)  # type: ignore[arg-type]
+          ^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: TrainConfig.__init__() got an unexpected keyword argument 'eval_episodes'
