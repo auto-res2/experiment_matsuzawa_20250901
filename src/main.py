@@ -1,6 +1,6 @@
 """
 main.py
-Entry point. Run:  python -m src.main --exp 1 ...
+Entry point. Run:  python -m src.main [--exp 1|2|3] ...
 """
 import argparse
 from pathlib import Path
@@ -9,13 +9,16 @@ import torch
 import torchvision
 from matplotlib import pyplot as plt  # ensures requirement
 
-from .train import (set_seed, HydraSketchBuffer, AdaptiveDecoder, ResNetFeatureWrapper,
-                    SimpleMLP, train_stream_hydra, DEVICE_DEFAULT)
+from .train import (
+    set_seed, HydraSketchBuffer, AdaptiveDecoder, ResNetFeatureWrapper,
+    SimpleMLP, train_stream_hydra, DEVICE_DEFAULT
+)
 from .preprocess import PermutedMNISTStream, SplitCIFAR100Stream
-from .evaluate import plot_accuracy_curve
+from .evaluate import plot_accuracy_curve, FIG_DIR as IMAGE_DIR
 
 # Ensure output dirs exist
-RESULTS_DIR = Path("results"); RESULTS_DIR.mkdir(exist_ok=True)
+RESULTS_DIR = Path("results")
+RESULTS_DIR.mkdir(exist_ok=True)
 
 # -------------------------------------------------------------
 #  Experiment wrappers (largely unchanged logic)
@@ -98,7 +101,7 @@ def experiment_2(args):
     plt.xlabel('Memory (KB, log)'); plt.ylabel('Final AACC (%)')
     plt.title('HydraMemory Pareto – Split CIFAR-100')
     plt.tight_layout()
-    pareto_pdf = Path("figures") / "accuracy_memory_pareto.pdf"
+    pareto_pdf = IMAGE_DIR / "accuracy_memory_pareto.pdf"
     plt.savefig(pareto_pdf, bbox_inches='tight')
     print(f"Saved figure: {pareto_pdf}")
     plt.close()
@@ -172,7 +175,8 @@ def experiment_3(args):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--exp', type=int, required=True, choices=[1, 2, 3])
+    parser.add_argument('--exp', type=int, default=1, choices=[1, 2, 3],
+                        help='Experiment to run (default: 1)')
     parser.add_argument('--dataset', type=str, default='split_cifar100')
     parser.add_argument('--method', type=str, default='hydra')
     parser.add_argument('--seed', type=int, default=0)

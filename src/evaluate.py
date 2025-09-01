@@ -12,13 +12,15 @@ from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# Directories for outputs
-FIG_DIR = Path("figures")
+# -----------------------------------------------------------------------------
+#  Figure directory – all images are stored under `.research/iteration2/images`
+# -----------------------------------------------------------------------------
+FIG_DIR = Path(".research/iteration2/images")
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 
-# -------------------------------------------------------------
+# -----------------------------------------------------------------------------
 #  Accuracy evaluation
-# -------------------------------------------------------------
+# -----------------------------------------------------------------------------
 @torch.no_grad()
 def evaluate(model: nn.Module, loader: DataLoader, device: str = "cpu") -> float:
     model.eval()
@@ -33,9 +35,9 @@ def evaluate(model: nn.Module, loader: DataLoader, device: str = "cpu") -> float
     model.train()
     return 100.0 * correct / total
 
-# -------------------------------------------------------------
+# -----------------------------------------------------------------------------
 #  Plotting
-# -------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 def plot_accuracy_curve(stats: List[Dict[str, Any]], title: str, filename: str):
     tasks = [s['task'] for s in stats]
