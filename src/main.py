@@ -1,4 +1,4 @@
-"""src/main.py
+'''src/main.py
 Main entry-point for running the demo experiment.  This script ties
 together the pre-processing, training, evaluation, and visualisation
 steps so that users can simply execute
@@ -6,9 +6,9 @@ steps so that users can simply execute
 from the project root.
 
 All plots are saved as vector-graphics PDF in
-    .research/iteration7/images/
+    .research/iteration8/images/
 per the project instructions.
-"""
+'''
 from __future__ import annotations
 
 import os
@@ -27,7 +27,7 @@ from .evaluate import evaluate
 
 
 # -------------------------  Directories  ------------------------- #
-IMG_DIR = Path(".research/iteration7/images")
+IMG_DIR = Path(".research/iteration8/images")
 IMG_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -64,7 +64,8 @@ def run_experiment(cfg: Dict[str, Any]):
     plt.tight_layout()
     pdf_path = IMG_DIR / "training_curve.pdf"
     plt.savefig(pdf_path, dpi=300, bbox_inches="tight")
-    print(f"Saved training curve → {pdf_path.relative_to(Path.cwd())}\n")
+    # Print a user-friendly path without risking ValueError from pathlib.relative_to.
+    print(f"Saved training curve → {pdf_path}\n")
 
     # Note: in a full research setting you might return additional
     # artefacts (trained model path, raw CSV, etc.).  For brevity we end
