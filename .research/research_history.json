@@ -6,5 +6,82 @@
     "diffusion sampling optimization",
     "adaptive timestep diffusion",
     "diffusion model quantization"
+  ],
+  "research_study_list": [
+    {
+      "title": "Wavelet Diffusion Models Are Fast and Scalable Image Generators"
+    },
+    {
+      "title": "A Simple Early Exiting Framework for Accelerated Sampling in Diffusion Models"
+    },
+    {
+      "title": "Improving Training Efficiency of Diffusion Models via Multi-Stage Framework and Tailored Multi-Decoder Architecture"
+    },
+    {
+      "title": "Dimensionality-Varying Diffusion Process"
+    },
+    {
+      "title": "Simple Hierarchical Planning with Diffusion"
+    },
+    {
+      "title": "Improving Training Efficiency of Diffusion Models via Multi-Stage Framework and Tailored Multi-Decoder Architecture"
+    },
+    {
+      "title": "Learning multi-scale local conditional probability models of images"
+    },
+    {
+      "title": "Learning multi-scale local conditional probability models of images"
+    },
+    {
+      "title": "Generative Powers of Ten"
+    },
+    {
+      "title": "A Simple Early Exiting Framework for Accelerated Sampling in Diffusion Models"
+    },
+    {
+      "title": "A Simple Early Exiting Framework for Accelerated Sampling in Diffusion Models"
+    },
+    {
+      "title": "Solving Diffusion ODEs with Optimal Boundary Conditions for Better Image Super-Resolution"
+    },
+    {
+      "title": "On Accelerating Diffusion-Based Sampling Processes via Improved Integration Approximation"
+    },
+    {
+      "title": "Score-Optimal Diffusion Schedules"
+    },
+    {
+      "title": "Improved off-policy training of diffusion samplers"
+    },
+    {
+      "title": "Training-Free Adaptive Diffusion with Bounded Difference Approximation Strategy"
+    },
+    {
+      "title": "Score-Optimal Diffusion Schedules"
+    },
+    {
+      "title": "Accelerating Diffusion Sampling with Optimized Time Steps"
+    },
+    {
+      "title": "A Simple Early Exiting Framework for Accelerated Sampling in Diffusion Models"
+    },
+    {
+      "title": "Diffusion Sampling with Momentum for Mitigating Divergence Artifacts"
+    },
+    {
+      "title": "Temporal Dynamic Quantization for Diffusion Models"
+    },
+    {
+      "title": "BitsFusion: 1.99 bits Weight Quantization of Diffusion Model"
+    },
+    {
+      "title": "Towards Accurate Post-training Quantization for Diffusion Models"
+    },
+    {
+      "title": "PTQD: Accurate Post-Training Quantization for Diffusion Models"
+    },
+    {
+      "title": "Post-Training Quantization on Diffusion Models"
+    }
   ]
 }
