@@ -5,3 +5,504 @@
   publisher = {GitHub},
   url       = {https://github.com/airas-org/airas}
 }
+
+% ===========================================
+% REQUIRED CITATIONS
+% These papers must be cited in the manuscript
+% ===========================================
+
+@article{author-year-diffusion,
+ title = {Diffusion Posterior Sampling for Linear Inverse Problem Solving: A Filtering Perspective}
+}
+
+@article{author-year-leveraging,
+ title = {Leveraging Early-Stage Robustness in Diffusion Models for Efficient and High-Quality Image Synthesis}
+}
+
+@article{bai-2024-faster,
+ abstract = {Efficient computation of graph diffusion equations (GDEs), such as
+Personalized PageRank, Katz centrality, and the Heat kernel, is crucial for
+clustering, training neural networks, and many other graph-related problems.
+Standard iterative methods require accessing the whole graph per iteration,
+making them time-consuming for large-scale graphs. While existing local solvers
+approximate diffusion vectors through heuristic local updates, they often
+operate sequentially and are typically designed for specific diffusion types,
+limiting their applicability. Given that diffusion vectors are highly
+localizable, as measured by the participation ratio, this paper introduces a
+novel framework for approximately solving GDEs using a local diffusion process.
+This framework reveals the suboptimality of existing local solvers.
+Furthermore, our approach effectively localizes standard iterative solvers by
+designing simple and provably sublinear time algorithms. These new local
+solvers are highly parallelizable, making them well-suited for implementation
+on GPUs. We demonstrate the effectiveness of our framework in quickly obtaining
+approximate diffusion vectors, achieving up to a hundred-fold speed
+improvement, and its applicability to large-scale dynamic graphs. Our framework
+could also facilitate more efficient local message-passing mechanisms for GNNs.},
+ arxiv_url = {https://arxiv.org/pdf/2410.21634v2.pdf},
+ author = {Jiahe Bai and Baojian Zhou and Deqing Yang and Yanghua Xiao},
+ github_url = {https://github.com/JiaheBai/Faster-Local-Solver-for-GDEs},
+ title = {Faster Local Solvers for Graph Diffusion Equations},
+ year = {2024}
+}
+
+@article{bartal-2023-multidiffusion,
+ abstract = {Recent advances in text-to-image generation with diffusion models present
+transformative capabilities in image quality. However, user controllability of
+the generated image, and fast adaptation to new tasks still remains an open
+challenge, currently mostly addressed by costly and long re-training and
+fine-tuning or ad-hoc adaptations to specific image generation tasks. In this
+work, we present MultiDiffusion, a unified framework that enables versatile and
+controllable image generation, using a pre-trained text-to-image diffusion
+model, without any further training or finetuning. At the center of our
+approach is a new generation process, based on an optimization task that binds
+together multiple diffusion generation processes with a shared set of
+parameters or constraints. We show that MultiDiffusion can be readily applied
+to generate high quality and diverse images that adhere to user-provided
+controls, such as desired aspect ratio (e.g., panorama), and spatial guiding
+signals, ranging from tight segmentation masks to bounding boxes. Project
+webpage: https://multidiffusion.github.io},
+ arxiv_url = {https://arxiv.org/pdf/2302.08113v1.pdf},
+ author = {Omer Bar-Tal and Lior Yariv and Yaron Lipman and Tali Dekel},
+ title = {MultiDiffusion: Fusing Diffusion Paths for Controlled Image Generation},
+ year = {2023}
+}
+
+@article{chen-2023-hierarchical,
+ abstract = {Diffusion models (DMs) have recently been introduced in image deblurring and
+exhibited promising performance, particularly in terms of details
+reconstruction. However, the diffusion model requires a large number of
+inference iterations to recover the clean image from pure Gaussian noise, which
+consumes massive computational resources. Moreover, the distribution
+synthesized by the diffusion model is often misaligned with the target results,
+leading to restrictions in distortion-based metrics. To address the above
+issues, we propose the Hierarchical Integration Diffusion Model (HI-Diff), for
+realistic image deblurring. Specifically, we perform the DM in a highly
+compacted latent space to generate the prior feature for the deblurring
+process. The deblurring process is implemented by a regression-based method to
+obtain better distortion accuracy. Meanwhile, the highly compact latent space
+ensures the efficiency of the DM. Furthermore, we design the hierarchical
+integration module to fuse the prior into the regression-based model from
+multiple scales, enabling better generalization in complex blurry scenarios.
+Comprehensive experiments on synthetic and real-world blur datasets demonstrate
+that our HI-Diff outperforms state-of-the-art methods. Code and trained models
+are available at https://github.com/zhengchen1999/HI-Diff.},
+ arxiv_url = {https://arxiv.org/pdf/2305.12966v4.pdf},
+ author = {Zheng Chen and Yulun Zhang and Ding Liu and Bin Xia and Jinjin Gu and Linghe Kong and Xin Yuan},
+ github_url = {https://github.com/zhengchen1999/HI-Diff},
+ title = {Hierarchical Integration Diffusion Model for Realistic Image Deblurring},
+ year = {2023}
+}
+
+@article{chen-2024-simple,
+ abstract = {Diffusion-based generative methods have proven effective in modeling
+trajectories with offline datasets. However, they often face computational
+challenges and can falter in generalization, especially in capturing temporal
+abstractions for long-horizon tasks. To overcome this, we introduce the
+Hierarchical Diffuser, a simple, fast, yet surprisingly effective planning
+method combining the advantages of hierarchical and diffusion-based planning.
+Our model adopts a "jumpy" planning strategy at the higher level, which allows
+it to have a larger receptive field but at a lower computational cost -- a
+crucial factor for diffusion-based planning methods, as we have empirically
+verified. Additionally, the jumpy sub-goals guide our low-level planner,
+facilitating a fine-tuning stage and further improving our approach's
+effectiveness. We conducted empirical evaluations on standard offline
+reinforcement learning benchmarks, demonstrating our method's superior
+performance and efficiency in terms of training and planning speed compared to
+the non-hierarchical Diffuser as well as other hierarchical planning methods.
+Moreover, we explore our model's generalization capability, particularly on how
+our method improves generalization capabilities on compositional
+out-of-distribution tasks.},
+ arxiv_url = {https://arxiv.org/pdf/2401.02644v1.pdf},
+ author = {Chang Chen and Fei Deng and Kenji Kawaguchi and Caglar Gulcehre and Sungjin Ahn},
+ github_url = {https://github.com/jannerm/diffuser},
+ title = {Simple Hierarchical Planning with Diffusion},
+ year = {2024}
+}
+
+@article{huang-2024-reverse,
+ abstract = {To generate data from trained diffusion models, most inference algorithms,
+such as DDPM, DDIM, and other variants, rely on discretizing the reverse SDEs
+or their equivalent ODEs. In this paper, we view such approaches as decomposing
+the entire denoising diffusion process into several segments, each
+corresponding to a reverse transition kernel (RTK) sampling subproblem.
+Specifically, DDPM uses a Gaussian approximation for the RTK, resulting in low
+per-subproblem complexity but requiring a large number of segments (i.e.,
+subproblems), which is conjectured to be inefficient. To address this, we
+develop a general RTK framework that enables a more balanced subproblem
+decomposition, resulting in $\tilde O(1)$ subproblems, each with strongly
+log-concave targets. We then propose leveraging two fast sampling algorithms,
+the Metropolis-Adjusted Langevin Algorithm (MALA) and Underdamped Langevin
+Dynamics (ULD), for solving these strongly log-concave subproblems. This gives
+rise to the RTK-MALA and RTK-ULD algorithms for diffusion inference. In theory,
+we further develop the convergence guarantees for RTK-MALA and RTK-ULD in total
+variation (TV) distance: RTK-ULD can achieve $\epsilon$ target error within
+$\tilde{\mathcal O}(d^{1/2}\epsilon^{-1})$ under mild conditions, and RTK-MALA
+enjoys a $\mathcal{O}(d^{2}\log(d/\epsilon))$ convergence rate under slightly
+stricter conditions. These theoretical results surpass the state-of-the-art
+convergence rates for diffusion inference and are well supported by numerical
+experiments.},
+ arxiv_url = {https://arxiv.org/pdf/2405.16387v1.pdf},
+ author = {Xunpeng Huang and Difan Zou and Hanze Dong and Yi Zhang and Yi-An Ma and Tong Zhang},
+ title = {Reverse Transition Kernel: A Flexible Framework to Accelerate Diffusion Inference},
+ year = {2024}
+}
+
+@article{kadkhodaie-2023-learning,
+ abstract = {Deep neural networks can learn powerful prior probability models for images,
+as evidenced by the high-quality generations obtained with recent score-based
+diffusion methods. But the means by which these networks capture complex global
+statistical structure, apparently without suffering from the curse of
+dimensionality, remain a mystery. To study this, we incorporate diffusion
+methods into a multi-scale decomposition, reducing dimensionality by assuming a
+stationary local Markov model for wavelet coefficients conditioned on
+coarser-scale coefficients. We instantiate this model using convolutional
+neural networks (CNNs) with local receptive fields, which enforce both the
+stationarity and Markov properties. Global structures are captured using a CNN
+with receptive fields covering the entire (but small) low-pass image. We test
+this model on a dataset of face images, which are highly non-stationary and
+contain large-scale geometric structures. Remarkably, denoising,
+super-resolution, and image synthesis results all demonstrate that these
+structures can be captured with significantly smaller conditioning
+neighborhoods than required by a Markov model implemented in the pixel domain.
+Our results show that score estimation for large complex images can be reduced
+to low-dimensional Markov conditional models across scales, alleviating the
+curse of dimensionality.},
+ arxiv_url = {https://arxiv.org/pdf/2303.02984v1.pdf},
+ author = {Zahra Kadkhodaie and Florentin Guth and Stéphane Mallat and Eero P Simoncelli},
+ journal = {ICLR 2023},
+ title = {Learning multi-scale local conditional probability models of images},
+ year = {2023}
+}
+
+@article{li-2023-faster,
+ abstract = {One of the main drawback of diffusion models is the slow inference time for
+image generation. Among the most successful approaches to addressing this
+problem are distillation methods. However, these methods require considerable
+computational resources. In this paper, we take another approach to diffusion
+model acceleration. We conduct a comprehensive study of the UNet encoder and
+empirically analyze the encoder features. This provides insights regarding
+their changes during the inference process. In particular, we find that encoder
+features change minimally, whereas the decoder features exhibit substantial
+variations across different time-steps. This insight motivates us to omit
+encoder computation at certain adjacent time-steps and reuse encoder features
+of previous time-steps as input to the decoder in multiple time-steps.
+Importantly, this allows us to perform decoder computation in parallel, further
+accelerating the denoising process. Additionally, we introduce a prior noise
+injection method to improve the texture details in the generated image. Besides
+the standard text-to-image task, we also validate our approach on other tasks:
+text-to-video, personalized generation and reference-guided generation. Without
+utilizing any knowledge distillation technique, our approach accelerates both
+the Stable Diffusion (SD) and DeepFloyd-IF model sampling by 41$\%$ and 24$\%$
+respectively, and DiT model sampling by 34$\%$, while maintaining high-quality
+generation performance.},
+ arxiv_url = {https://arxiv.org/pdf/2312.09608v2.pdf},
+ author = {Senmao Li and Taihang Hu and Joost van de Weijer and Fahad Shahbaz Khan and Tao Liu and Linxuan Li and Shiqi Yang and Yaxing Wang and Ming-Ming Cheng and Jian Yang},
+ github_url = {https://github.com/LuChengTHU/dpm-solver},
+ title = {Faster Diffusion: Rethinking the Role of the Encoder for Diffusion Model Inference},
+ year = {2023}
+}
+
+@article{lin-2023-hyperbolic,
+ abstract = {Finding meaningful representations and distances of hierarchical data is
+important in many fields. This paper presents a new method for hierarchical
+data embedding and distance. Our method relies on combining diffusion geometry,
+a central approach to manifold learning, and hyperbolic geometry. Specifically,
+using diffusion geometry, we build multi-scale densities on the data, aimed to
+reveal their hierarchical structure, and then embed them into a product of
+hyperbolic spaces. We show theoretically that our embedding and distance
+recover the underlying hierarchical structure. In addition, we demonstrate the
+efficacy of the proposed method and its advantages compared to existing methods
+on graph embedding benchmarks and hierarchical datasets.},
+ arxiv_url = {https://arxiv.org/pdf/2305.18962v1.pdf},
+ author = {Ya-Wei Eileen Lin and Ronald R. Coifman and Gal Mishne and Ronen Talmon},
+ github_url = {https://github.com/HazyResearch/hyperbolics},
+ title = {Hyperbolic Diffusion Embedding and Distance for Hierarchical Representation Learning},
+ year = {2023}
+}
+
+@article{liu-2023-oms,
+ abstract = {Diffusion probabilistic models (DPMs) are a new class of generative models
+that have achieved state-of-the-art generation quality in various domains.
+Despite the promise, one major drawback of DPMs is the slow generation speed
+due to the large number of neural network evaluations required in the
+generation process. In this paper, we reveal an overlooked dimension -- model
+schedule -- for optimizing the trade-off between generation quality and speed.
+More specifically, we observe that small models, though having worse generation
+quality when used alone, could outperform large models in certain generation
+steps. Therefore, unlike the traditional way of using a single model, using
+different models in different generation steps in a carefully designed
+\emph{model schedule} could potentially improve generation quality and speed
+\emph{simultaneously}. We design OMS-DPM, a predictor-based search algorithm,
+to optimize the model schedule given an arbitrary generation time budget and a
+set of pre-trained models. We demonstrate that OMS-DPM can find model schedules
+that improve generation quality and speed than prior state-of-the-art methods
+across CIFAR-10, CelebA, ImageNet, and LSUN datasets. When applied to the
+public checkpoints of the Stable Diffusion model, we are able to accelerate the
+sampling by 2$\times$ while maintaining the generation quality.},
+ arxiv_url = {https://arxiv.org/pdf/2306.08860v1.pdf},
+ author = {Enshu Liu and Xuefei Ning and Zinan Lin and Huazhong Yang and Yu Wang},
+ github_url = {https://github.com/LuChengTHU/dpm-solver},
+ title = {OMS-DPM: Optimizing the Model Schedule for Diffusion Probabilistic Models},
+ year = {2023}
+}
+
+@article{moon-2024-simple,
+ abstract = {Diffusion models have shown remarkable performance in generation problems
+over various domains including images, videos, text, and audio. A practical
+bottleneck of diffusion models is their sampling speed, due to the repeated
+evaluation of score estimation networks during the inference. In this work, we
+propose a novel framework capable of adaptively allocating compute required for
+the score estimation, thereby reducing the overall sampling time of diffusion
+models. We observe that the amount of computation required for the score
+estimation may vary along the time step for which the score is estimated. Based
+on this observation, we propose an early-exiting scheme, where we skip the
+subset of parameters in the score estimation network during the inference,
+based on a time-dependent exit schedule. Using the diffusion models for image
+synthesis, we show that our method could significantly improve the sampling
+throughput of the diffusion models without compromising image quality.
+Furthermore, we also demonstrate that our method seamlessly integrates with
+various types of solvers for faster sampling, capitalizing on their
+compatibility to enhance overall efficiency. The source code and our
+experiments are available at \url{https://github.com/taehong-moon/ee-diffusion}},
+ arxiv_url = {https://arxiv.org/pdf/2408.05927v1.pdf},
+ author = {Taehong Moon and Moonseok Choi and EungGu Yun and Jongmin Yoon and Gayoung Lee and Jaewoong Cho and Juho Lee},
+ title = {A Simple Early Exiting Framework for Accelerated Sampling in Diffusion Models},
+ year = {2024}
+}
+
+@article{phung-2022-wavelet,
+ abstract = {Diffusion models are rising as a powerful solution for high-fidelity image
+generation, which exceeds GANs in quality in many circumstances. However, their
+slow training and inference speed is a huge bottleneck, blocking them from
+being used in real-time applications. A recent DiffusionGAN method
+significantly decreases the models' running time by reducing the number of
+sampling steps from thousands to several, but their speeds still largely lag
+behind the GAN counterparts. This paper aims to reduce the speed gap by
+proposing a novel wavelet-based diffusion scheme. We extract low-and-high
+frequency components from both image and feature levels via wavelet
+decomposition and adaptively handle these components for faster processing
+while maintaining good generation quality. Furthermore, we propose to use a
+reconstruction term, which effectively boosts the model training convergence.
+Experimental results on CelebA-HQ, CIFAR-10, LSUN-Church, and STL-10 datasets
+prove our solution is a stepping-stone to offering real-time and high-fidelity
+diffusion models. Our code and pre-trained checkpoints are available at
+\url{https://github.com/VinAIResearch/WaveDiff.git}.},
+ arxiv_url = {https://arxiv.org/pdf/2211.16152v2.pdf},
+ author = {Hao Phung and Quan Dao and Anh Tran},
+ title = {Wavelet Diffusion Models Are Fast and Scalable Image Generators},
+ year = {2022}
+}
+
+@article{qiang-2023-coarse,
+ abstract = {Generating desirable molecular structures in 3D is a fundamental problem for
+drug discovery. Despite the considerable progress we have achieved, existing
+methods usually generate molecules in atom resolution and ignore intrinsic
+local structures such as rings, which leads to poor quality in generated
+structures, especially when generating large molecules. Fragment-based molecule
+generation is a promising strategy, however, it is nontrivial to be adapted for
+3D non-autoregressive generations because of the combinational optimization
+problems. In this paper, we utilize a coarse-to-fine strategy to tackle this
+problem, in which a Hierarchical Diffusion-based model (i.e.~HierDiff) is
+proposed to preserve the validity of local segments without relying on
+autoregressive modeling. Specifically, HierDiff first generates coarse-grained
+molecule geometries via an equivariant diffusion process, where each
+coarse-grained node reflects a fragment in a molecule. Then the coarse-grained
+nodes are decoded into fine-grained fragments by a message-passing process and
+a newly designed iterative refined sampling module. Lastly, the fine-grained
+fragments are then assembled to derive a complete atomic molecular structure.
+Extensive experiments demonstrate that HierDiff consistently improves the
+quality of molecule generation over existing methods},
+ arxiv_url = {https://arxiv.org/pdf/2305.13266v2.pdf},
+ author = {Bo Qiang and Yuxuan Song and Minkai Xu and Jingjing Gong and Bowen Gao and Hao Zhou and Weiying Ma and Yanyan Lan},
+ title = {Coarse-to-Fine: a Hierarchical Diffusion Model for Molecule Generation in 3D},
+ year = {2023}
+}
+
+@article{salimans-2024-multistep,
+ abstract = {We present a new method for making diffusion models faster to sample. The
+method distills many-step diffusion models into few-step models by matching
+conditional expectations of the clean data given noisy data along the sampling
+trajectory. Our approach extends recently proposed one-step methods to the
+multi-step case, and provides a new perspective by interpreting these
+approaches in terms of moment matching. By using up to 8 sampling steps, we
+obtain distilled models that outperform not only their one-step versions but
+also their original many-step teacher models, obtaining new state-of-the-art
+results on the Imagenet dataset. We also show promising results on a large
+text-to-image model where we achieve fast generation of high resolution images
+directly in image space, without needing autoencoders or upsamplers.},
+ arxiv_url = {https://arxiv.org/pdf/2406.04103v1.pdf},
+ author = {Tim Salimans and Thomas Mensink and Jonathan Heek and Emiel Hoogeboom},
+ github_url = {https://github.com/google/jax},
+ title = {Multistep Distillation of Diffusion Models via Moment Matching},
+ year = {2024}
+}
+
+@article{shang-2022-post,
+ abstract = {Denoising diffusion (score-based) generative models have recently achieved
+significant accomplishments in generating realistic and diverse data. These
+approaches define a forward diffusion process for transforming data into noise
+and a backward denoising process for sampling data from noise. Unfortunately,
+the generation process of current denoising diffusion models is notoriously
+slow due to the lengthy iterative noise estimations, which rely on cumbersome
+neural networks. It prevents the diffusion models from being widely deployed,
+especially on edge devices. Previous works accelerate the generation process of
+diffusion model (DM) via finding shorter yet effective sampling trajectories.
+However, they overlook the cost of noise estimation with a heavy network in
+every iteration. In this work, we accelerate generation from the perspective of
+compressing the noise estimation network. Due to the difficulty of retraining
+DMs, we exclude mainstream training-aware compression paradigms and introduce
+post-training quantization (PTQ) into DM acceleration. However, the output
+distributions of noise estimation networks change with time-step, making
+previous PTQ methods fail in DMs since they are designed for single-time step
+scenarios. To devise a DM-specific PTQ method, we explore PTQ on DM in three
+aspects: quantized operations, calibration dataset, and calibration metric. We
+summarize and use several observations derived from all-inclusive
+investigations to formulate our method, which especially targets the unique
+multi-time-step structure of DMs. Experimentally, our method can directly
+quantize full-precision DMs into 8-bit models while maintaining or even
+improving their performance in a training-free manner. Importantly, our method
+can serve as a plug-and-play module on other fast-sampling methods, e.g., DDIM.
+The code is available at https://github.com/42Shawn/PTQ4DM .},
+ arxiv_url = {https://arxiv.org/pdf/2211.15736v3.pdf},
+ author = {Yuzhang Shang and Zhihang Yuan and Bin Xie and Bingzhe Wu and Yan Yan},
+ github_url = {https://github.com/42Shawn/PTQ4DM},
+ title = {Post-Training Quantization on Diffusion Models},
+ year = {2022}
+}
+
+@article{vargas-2023-denoising,
+ abstract = {Denoising diffusion models are a popular class of generative models providing
+state-of-the-art results in many domains. One adds gradually noise to data
+using a diffusion to transform the data distribution into a Gaussian
+distribution. Samples from the generative model are then obtained by simulating
+an approximation of the time-reversal of this diffusion initialized by Gaussian
+samples. Practically, the intractable score terms appearing in the
+time-reversed process are approximated using score matching techniques. We
+explore here a similar idea to sample approximately from unnormalized
+probability density functions and estimate their normalizing constants. We
+consider a process where the target density diffuses towards a Gaussian.
+Denoising Diffusion Samplers (DDS) are obtained by approximating the
+corresponding time-reversal. While score matching is not applicable in this
+context, we can leverage many of the ideas introduced in generative modeling
+for Monte Carlo sampling. Existing theoretical results from denoising diffusion
+models also provide theoretical guarantees for DDS. We discuss the connections
+between DDS, optimal control and Schr\"odinger bridges and finally demonstrate
+DDS experimentally on a variety of challenging sampling tasks.},
+ arxiv_url = {https://arxiv.org/pdf/2302.13834v2.pdf},
+ author = {Francisco Vargas and Will Grathwohl and Arnaud Doucet},
+ journal = {In The Eleventh In The Eleventh International Conference on
+  Learning Representations, 2023},
+ title = {Denoising Diffusion Samplers},
+ year = {2023}
+}
+
+@article{wang-2023-generative,
+ abstract = {We present a method that uses a text-to-image model to generate consistent
+content across multiple image scales, enabling extreme semantic zooms into a
+scene, e.g., ranging from a wide-angle landscape view of a forest to a macro
+shot of an insect sitting on one of the tree branches. We achieve this through
+a joint multi-scale diffusion sampling approach that encourages consistency
+across different scales while preserving the integrity of each individual
+sampling process. Since each generated scale is guided by a different text
+prompt, our method enables deeper levels of zoom than traditional
+super-resolution methods that may struggle to create new contextual structure
+at vastly different scales. We compare our method qualitatively with
+alternative techniques in image super-resolution and outpainting, and show that
+our method is most effective at generating consistent multi-scale content.},
+ arxiv_url = {https://arxiv.org/pdf/2312.02149v2.pdf},
+ author = {Xiaojuan Wang and Janne Kontkanen and Brian Curless and Steve Seitz and Ira Kemelmacher and Ben Mildenhall and Pratul Srinivasan and Dor Verbin and Aleksander Holynski},
+ title = {Generative Powers of Ten},
+ year = {2023}
+}
+
+@article{wizadwongsa-2023-accelerating,
+ abstract = {Guided diffusion is a technique for conditioning the output of a diffusion
+model at sampling time without retraining the network for each specific task.
+One drawback of diffusion models, however, is their slow sampling process.
+Recent techniques can accelerate unguided sampling by applying high-order
+numerical methods to the sampling process when viewed as differential
+equations. On the contrary, we discover that the same techniques do not work
+for guided sampling, and little has been explored about its acceleration. This
+paper explores the culprit of this problem and provides a solution based on
+operator splitting methods, motivated by our key finding that classical
+high-order numerical methods are unsuitable for the conditional function. Our
+proposed method can re-utilize the high-order methods for guided sampling and
+can generate images with the same quality as a 250-step DDIM baseline using
+32-58% less sampling time on ImageNet256. We also demonstrate usage on a wide
+variety of conditional generation tasks, such as text-to-image generation,
+colorization, inpainting, and super-resolution.},
+ arxiv_url = {https://arxiv.org/pdf/2301.11558v1.pdf},
+ author = {Suttisak Wizadwongsa and Supasorn Suwajanakorn},
+ github_url = {https://github.com/sWizad/split-diffusion},
+ title = {Accelerating Guided Diffusion Sampling with Splitting Numerical Methods},
+ year = {2023}
+}
+
+@article{wizadwongsa-2023-diffusion,
+ abstract = {Despite the remarkable success of diffusion models in image generation, slow
+sampling remains a persistent issue. To accelerate the sampling process, prior
+studies have reformulated diffusion sampling as an ODE/SDE and introduced
+higher-order numerical methods. However, these methods often produce divergence
+artifacts, especially with a low number of sampling steps, which limits the
+achievable acceleration. In this paper, we investigate the potential causes of
+these artifacts and suggest that the small stability regions of these methods
+could be the principal cause. To address this issue, we propose two novel
+techniques. The first technique involves the incorporation of Heavy Ball (HB)
+momentum, a well-known technique for improving optimization, into existing
+diffusion numerical methods to expand their stability regions. We also prove
+that the resulting methods have first-order convergence. The second technique,
+called Generalized Heavy Ball (GHVB), constructs a new high-order method that
+offers a variable trade-off between accuracy and artifact suppression.
+Experimental results show that our techniques are highly effective in reducing
+artifacts and improving image quality, surpassing state-of-the-art diffusion
+solvers on both pixel-based and latent-based diffusion models for low-step
+sampling. Our research provides novel insights into the design of numerical
+methods for future diffusion work.},
+ arxiv_url = {https://arxiv.org/pdf/2307.11118v1.pdf},
+ author = {Suttisak Wizadwongsa and Worameth Chinchuthakun and Pramook Khungurn and Amit Raj and Supasorn Suwajanakorn},
+ github_url = {https://github.com/LuChengTHU/dpm-solver},
+ title = {Diffusion Sampling with Momentum for Mitigating Divergence Artifacts},
+ year = {2023}
+}
+
+% ===========================================
+% REFERENCE CANDIDATES
+% Additional reference papers for context
+% ===========================================
+
+@article{author-year-multidimensional,
+ title = {Multidimensional scaling.}
+}
+
+@article{author-year-towards,
+ title = {Towards a theoretical foundation for Laplacian-based manifold methods.}
+}
+
+@article{chami-2020-from,
+ abstract = {Similarity-based Hierarchical Clustering (HC) is a classical unsupervised
+machine learning algorithm that has traditionally been solved with heuristic
+algorithms like Average-Linkage. Recently, Dasgupta reframed HC as a discrete
+optimization problem by introducing a global cost function measuring the
+quality of a given tree. In this work, we provide the first continuous
+relaxation of Dasgupta's discrete optimization problem with provable quality
+guarantees. The key idea of our method, HypHC, is showing a direct
+correspondence from discrete trees to continuous representations (via the
+hyperbolic embeddings of their leaf nodes) and back (via a decoding algorithm
+that maps leaf embeddings to a dendrogram), allowing us to search the space of
+discrete binary trees with continuous optimization. Building on analogies
+between trees and hyperbolic space, we derive a continuous analogue for the
+notion of lowest common ancestor, which leads to a continuous relaxation of
+Dasgupta's discrete objective. We can show that after decoding, the global
+minimizer of our continuous relaxation yields a discrete tree with a (1 +
+epsilon)-factor approximation for Dasgupta's optimal tree, where epsilon can be
+made arbitrarily small and controls optimization challenges. We experimentally
+evaluate HypHC on a variety of HC benchmarks and find that even approximate
+solutions found with gradient descent have superior clustering quality than
+agglomerative heuristics or other gradient based algorithms. Finally, we
+highlight the flexibility of HypHC using end-to-end training in a downstream
+classification task.},
+ arxiv_url = {https://arxiv.org/pdf/2010.00402v1.pdf},
+ author = {Ines Chami and Albert Gu and Vaggos Chatziafratis and Christopher Ré},
+ title = {From trees to continuous embeddings and back: Hyperbolic hierarchical clustering.},
+ year = {2020}
+}
