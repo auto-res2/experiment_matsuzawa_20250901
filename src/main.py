@@ -16,7 +16,7 @@ def main():
     print(f"Using device: {device}")
 
     # Ensure the image output directory exists ----------------------------------
-    Path(".research/iteration3/images").mkdir(parents=True, exist_ok=True)
+    Path(".research/iteration5/images").mkdir(parents=True, exist_ok=True)
 
     # Run a lightweight version of the experiments. The loops have been shortened
     # to keep the execution time reasonable inside the testing sandbox.
