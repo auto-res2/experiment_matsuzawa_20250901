@@ -1,97 +1,101 @@
 """src/train.py
-Train module: implements a very small REINFORCE agent for CartPole-v1.
-The function `train` is the public entry-point used by src.main.
-All heavy lifting (optimisation, logging, checkpointing) happens here.
+Training script for a tiny feed-forward network on a synthetic binary
+classification task.  The training routine is deliberately lightweight so
+that CI (or a laptop without GPU) can finish it within a few seconds while
+still exercising the full pipeline (pre-processing → training → evaluation →
+visualisation).
+
+The trained model is stored in ./models/simple_net.pt
+Loss curves are returned to the caller so that `src.main` can create high-
+quality PDF figures afterwards.
 """
 from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Tuple, List
 
-import numpy as np
 import torch
 from torch import nn
-import torch.nn.functional as F
-import gymnasium as gym
+from torch.utils.data import DataLoader, TensorDataset
 
-# deterministic helper -----------------------------------------------------------------
+from .preprocess import make_dataloaders  # relative import, see Instructions
 
-def set_seed(seed: int | None = None) -> None:
-    if seed is None:
-        return
-    torch.manual_seed(seed)
-    np.random.seed(seed)
+# ──────────────────────────────────────────────────────────────────────────────
+# Simple feed-forward classifier
+# ──────────────────────────────────────────────────────────────────────────────
 
-
-# small policy network ------------------------------------------------------------------
-
-class PolicyNet(nn.Module):
-    def __init__(self, obs_dim: int, act_dim: int):
+class SimpleNet(nn.Module):
+    def __init__(self, input_dim: int = 2, hidden_dim: int = 32):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(obs_dim, 128), nn.ReLU(),
-            nn.Linear(128, 128), nn.ReLU(),
-            nn.Linear(128, act_dim)
+            nn.Linear(input_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, 2),
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:  # logits
+    def forward(self, x: torch.Tensor) -> torch.Tensor:  # (N, D) → (N, 2)
         return self.net(x)
 
 
-# REINFORCE -----------------------------------------------------------------------------
+# ──────────────────────────────────────────────────────────────────────────────
+# Training routine
+# ──────────────────────────────────────────────────────────────────────────────
 
-def _collect_episode(env: gym.Env, policy: PolicyNet, device: torch.device) -> Tuple[List[torch.Tensor], List[torch.Tensor], float]:
-    obs, _ = env.reset()
-    done = False
-    log_probs: List[torch.Tensor] = []
-    rewards: List[float] = []
-    ep_ret = 0.0
-    while not done:
-        obs_t = torch.as_tensor(obs, dtype=torch.float32, device=device)
-        logits = policy(obs_t)
-        dist = torch.distributions.Categorical(logits=logits)
-        action = dist.sample()
-        log_probs.append(dist.log_prob(action))
-        obs, reward, terminated, truncated, _ = env.step(action.item())
-        done = terminated or truncated
-        rewards.append(reward)
-        ep_ret += reward
-    returns: List[float] = []
-    g = 0.0
-    for r in reversed(rewards):
-        g = r + 0.99 * g
-        returns.insert(0, g)
-    returns_t = torch.as_tensor(returns, dtype=torch.float32, device=device)
-    returns_t = (returns_t - returns_t.mean()) / (returns_t.std() + 1e-6)
-    return log_probs, returns_t, ep_ret
+def train(config: dict) -> Tuple[nn.Module, List[float], List[float]]:
+    """Train *SimpleNet* according to *config* and return (model, train_loss, val_loss).
 
-
-def train(env: gym.Env, cfg: Dict, models_dir: Path) -> Tuple[Path, List[float]]:
-    """Train policy; returns (path_to_checkpoint, reward_history)"""
+    The caller (src.main) is responsible for serialising the model and for any
+    further processing/visualisation.  Returning the loss curves keeps this
+    function unit-test friendly.
+    """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    obs_dim = env.observation_space.shape[0]
-    act_dim = env.action_space.n
 
-    # Ensure the learning rate is a float – YAML may parse it as a string
-    lr: float = float(cfg["lr"])
-    policy = PolicyNet(obs_dim, act_dim).to(device)
-    optimizer = torch.optim.Adam(policy.parameters(), lr=lr)
+    # 1) Data -----------------------------------------------------------------
+    loaders = make_dataloaders(config)
+    train_loader: DataLoader = loaders["train"]
+    val_loader:   DataLoader = loaders["val"]
 
-    reward_history: List[float] = []
-    start = time.time()
-    for ep in range(1, cfg["epochs"] + 1):
-        log_probs, returns_t, ep_ret = _collect_episode(env, policy, device)
-        loss = -torch.stack([lp * G for lp, G in zip(log_probs, returns_t)]).sum()
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-        reward_history.append(ep_ret)
-        if ep % cfg["log_every"] == 0:
-            elapsed = time.time() - start
-            print(f"[TRAIN] Episode {ep:4d}/{cfg['epochs']}  |  return = {ep_ret:6.1f}  |  elapsed {elapsed:5.1f}s", flush=True)
-    models_dir.mkdir(parents=True, exist_ok=True)
-    ckpt_path = models_dir / "policy_cartpole.pt"
-    torch.save(policy.state_dict(), ckpt_path)
-    print(f"[TRAIN] finished – checkpoint saved to {ckpt_path.resolve()}")
-    return ckpt_path, reward_history
+    # 2) Model ----------------------------------------------------------------
+    model = SimpleNet(input_dim=config["data"]["dim"], hidden_dim=config["model"]["hidden_dim"]).to(device)
+    criterion = nn.CrossEntropyLoss()
+    optimiser = torch.optim.Adam(model.parameters(), lr=config["optim"]["lr"])
+
+    epochs = config["optim"]["epochs"]
+    train_losses, val_losses = [], []
+
+    # 3) Training loop --------------------------------------------------------
+    t0 = time.perf_counter()
+    for epoch in range(1, epochs + 1):
+        model.train()
+        epoch_loss = 0.0
+        for xb, yb in train_loader:
+            xb, yb = xb.to(device), yb.to(device)
+            optimiser.zero_grad()
+            loss = criterion(model(xb), yb)
+            loss.backward()
+            optimiser.step()
+            epoch_loss += loss.item() * xb.size(0)
+        epoch_loss /= len(train_loader.dataset)
+        train_losses.append(epoch_loss)
+
+        # validation
+        model.eval()
+        with torch.no_grad():
+            vloss = 0.0
+            for xb, yb in val_loader:
+                xb, yb = xb.to(device), yb.to(device)
+                vloss += criterion(model(xb), yb).item() * xb.size(0)
+            vloss /= len(val_loader.dataset)
+            val_losses.append(vloss)
+
+        if config["misc"]["verbose"]:
+            print(f"Epoch {epoch:02d}/{epochs} | train {epoch_loss:.4f} | val {vloss:.4f}")
+
+    dt = time.perf_counter() - t0
+    if config["misc"]["verbose"]:
+        print(f"[train] finished in {dt:.2f} s → final val-loss {val_losses[-1]:.4f}")
+
+    return model, train_losses, val_losses

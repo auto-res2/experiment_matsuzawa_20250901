@@ -1,42 +1,32 @@
 """src/evaluate.py
-Evaluation utilities – importable by src.main.
+Evaluation helper – computes accuracy on the held-out **test** set.  The test
+loader is built by `src.preprocess.make_dataloaders` so we re-use that helper
+here to avoid code duplication.
 """
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict
 
-import numpy as np
 import torch
-import gymnasium as gym
+from torch import nn
+from torch.utils.data import DataLoader
 
-from .train import PolicyNet  # re-use same architecture
+from .preprocess import make_dataloaders
 
 
-def evaluate(env: gym.Env, ckpt_path: Path, episodes: int = 20) -> Dict[str, float]:
-    """Run policy for a few episodes and report mean / std return."""
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    obs_dim = env.observation_space.shape[0]
-    act_dim = env.action_space.n
-    policy = PolicyNet(obs_dim, act_dim).to(device)
-    policy.load_state_dict(torch.load(ckpt_path, map_location=device))
-    policy.eval()
+def evaluate(model: nn.Module, config: Dict) -> float:
+    """Return classification accuracy on the test set."""
+    device = next(model.parameters()).device
+    loaders = make_dataloaders(config)
+    test_loader: DataLoader = loaders["test"]
 
-    rets: List[float] = []
+    model.eval()
+    correct = 0
     with torch.no_grad():
-        for ep in range(episodes):
-            obs, _ = env.reset()
-            done = False
-            ep_ret = 0.0
-            while not done:
-                obs_t = torch.as_tensor(obs, dtype=torch.float32, device=device)
-                logits = policy(obs_t)
-                action = torch.argmax(logits).item()
-                obs, reward, terminated, truncated, _ = env.step(action)
-                done = terminated or truncated
-                ep_ret += reward
-            rets.append(ep_ret)
-    return {
-        "mean_return": float(np.mean(rets)),
-        "std_return": float(np.std(rets)),
-    }
+        for xb, yb in test_loader:
+            xb = xb.to(device)
+            logits = model(xb)
+            preds = logits.argmax(dim=1).cpu()
+            correct += (preds == yb).sum().item()
+    acc = correct / len(test_loader.dataset)
+    return acc

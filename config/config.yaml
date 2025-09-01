@@ -1,8 +1,23 @@
-# config/cartpole.yaml
-# Hyper-parameters for the CartPole-v1 REINFORCE experiment
-env_name: "CartPole-v1"
+# Default experiment configuration (same as hard-coded in src.main for the very
+# first run).  Users are encouraged to tweak parameters and re-run `python -m
+# src.main` to observe different behaviours.
+
 seed: 42
-lr: 3e-3
-epochs: 400
-log_every: 20
-eval_episodes: 30
+
+data:
+  n_samples: 2000  # total size of the synthetic data set
+  dim: 2           # feature dimensionality
+  val_split: 0.1   # 10 % of samples used for validation
+  test_split: 0.1  # 10 % of samples used for testing
+  flip_prob: 0.05  # probability of flipping class label (noise)
+
+model:
+  hidden_dim: 32   # width of the hidden layers
+
+optim:
+  lr: 0.001
+  epochs: 20
+  batch_size: 128
+
+misc:
+  verbose: true

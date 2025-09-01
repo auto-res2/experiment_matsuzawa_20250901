@@ -1,6 +1,6 @@
-torch>=2.0.0
+# requirements.txt – all third-party dependencies explicitly imported in src/
+
 numpy
-matplotlib
-seaborn
 pyyaml
-gymnasium
+matplotlib
+torch
