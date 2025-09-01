@@ -152,9 +152,9 @@ class DHACRunner:  # pylint: disable=too-many-instance-attributes
         self.exp_dir.mkdir(parents=True, exist_ok=True)
 
         # ------------------------------------------------------------------
-        # All experiment images should live under .research/iteration3/images
+        # All experiment images should live under .research/iteration4/images
         # ------------------------------------------------------------------
-        self.img_root = Path(".research/iteration3/images")
+        self.img_root = Path(".research/iteration4/images")
         self.img_root.mkdir(parents=True, exist_ok=True)
 
     # ------------------------------------------------------------------

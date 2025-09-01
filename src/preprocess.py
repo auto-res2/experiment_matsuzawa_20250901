@@ -33,6 +33,17 @@ def _make_real_dataset(root: Path, shape: tuple[int, int, int], n_img: int = 10)
         save_image(img, root / f"real_{i}.png")
 
 
+def _make_train_tensor(root: Path, shape: tuple[int, int, int], n_img: int = 128) -> None:
+    """Create and save a tensor that will be used for training the TinyCNN.
+
+    The tensor is saved at `<root>/train.pt` so that `src/train.py` can load it
+    directly. Images are sampled uniformly in [0,1].
+    """
+    c, h, w = shape
+    imgs = torch.rand(n_img, c, h, w)
+    torch.save(imgs, root / "train.pt")
+
+
 def run() -> Dict[str, Path]:  # noqa: D401
     """Create synthetic *real* datasets and return a mapping <name -> path>."""
     random.seed(0)
@@ -43,7 +54,9 @@ def run() -> Dict[str, Path]:  # noqa: D401
     out: Dict[str, Path] = {}
 
     for name, shape in DATASETS.items():
-        real_root = base / name / "real_cache"
+        dataset_root = base / name
+        real_root = dataset_root / "real_cache"
         _make_real_dataset(real_root, shape)
-        out[name] = base / name
+        _make_train_tensor(dataset_root, shape)
+        out[name] = dataset_root
     return out

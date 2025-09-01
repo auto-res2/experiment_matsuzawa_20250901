@@ -60,7 +60,11 @@ def run(cfg: Dict):
     model_dir = Path(cfg["model_dir"])
     model_dir.mkdir(parents=True, exist_ok=True)
 
-    imgs = torch.load(data_root / "train.pt")  # shape B×C×H×W, values in [0,1]
+    imgs_path = data_root / "train.pt"
+    if not imgs_path.exists():
+        raise FileNotFoundError(f"Training tensor not found at '{imgs_path}'. Did preprocessing run correctly?")
+
+    imgs = torch.load(imgs_path)  # shape B×C×H×W, values in [0,1]
 
     ds = TensorDataset(imgs, imgs)  # identity mapping → auto-encoder style
     loader = DataLoader(ds, batch_size=32, shuffle=True)
@@ -105,9 +109,9 @@ def run(cfg: Dict):
     plt.title("Training curve – TinyCNN")
     plt.tight_layout()
     # ------------------------------------------------------------------
-    #  All experiment images must live under .research/iteration3/images
+    #  All experiment images must live under .research/iteration4/images
     # ------------------------------------------------------------------
-    img_dir = Path(".research/iteration3/images")
+    img_dir = Path(".research/iteration4/images")
     img_dir.mkdir(parents=True, exist_ok=True)
     plt.savefig(img_dir / "training_loss.pdf", format="pdf", bbox_inches="tight")
     plt.close()
