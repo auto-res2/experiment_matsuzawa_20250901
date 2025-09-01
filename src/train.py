@@ -1,140 +1,103 @@
 """
-train.py – contains the training routine that is used by src.main
-implements a very small fully connected neural network that is able to
-solve the Iris classification problem.  The goal of this script is **not**
-to reproduce the very complex ACHyD benchmark from the research draft,
-but to provide a fully-runnable, self-contained example that fulfils all
-engineering constraints given in the Instructions section (relative
-imports, clean stdout, high-quality PDF plots, etc.).
-
-The code purposefully stays minimal while still following good research
-software hygiene (deterministic seeding, GPU support, progress display,
-etc.).
+train.py – Training utilities for a toy regression task
+The goal is to keep the code base minimal but still demonstrate the
+complete research-style pipeline requested in the Instructions.
+The model learns y = 2x + ε from synthetic data generated in
+preprocess.py.  Training artefacts are stored under ./models.
 """
 from __future__ import annotations
 
-import random
+import time
 from pathlib import Path
-from typing import List, Tuple
+from typing import Dict, Tuple
 
-import numpy as np
 import torch
-from torch import nn
+from torch import Tensor, nn
 from torch.utils.data import DataLoader, TensorDataset
 
-# ----------------------------------------------------------------------------
-#  Model definition
-# ----------------------------------------------------------------------------
+# relative import (module lives in the same package – src)
+from .utils import set_seed
 
+# -----------------------------------------------------------------------------
+# Model definition
+# -----------------------------------------------------------------------------
+class SimpleRegressor(nn.Module):
+    """A two-layer perceptron for 1-D regression."""
 
-class SimpleNet(nn.Module):
-    """A very small MLP with one hidden layer (16 units, ReLU)."""
-
-    def __init__(self, in_dim: int, out_dim: int) -> None:
+    def __init__(self, hidden_dim: int = 32):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(in_dim, 16),
+            nn.Linear(1, hidden_dim),
             nn.ReLU(),
-            nn.Linear(16, out_dim),
+            nn.Linear(hidden_dim, 1),
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:  # type: ignore[override]
+    def forward(self, x: Tensor) -> Tensor:  # noqa: D401 (plain docstring)
+        """Forward pass."""
         return self.net(x)
 
 
-# ----------------------------------------------------------------------------
-#  Helper – deterministic seeding
-# ----------------------------------------------------------------------------
-
-def set_seed(seed: int) -> None:
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)  # type: ignore[attr-defined]
-    torch.backends.cudnn.deterministic = True  # type: ignore[attr-defined]
-    torch.backends.cudnn.benchmark = False  # type: ignore[attr-defined]
-
-
-# ----------------------------------------------------------------------------
-#  main training utility – returns the trained model _and_ the loss curves
-# ----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# Training routine
+# -----------------------------------------------------------------------------
 
 def train_model(
-    train_ds: TensorDataset,
-    val_ds: TensorDataset,
-    epochs: int = 100,
-    lr: float = 1e-2,
-    batch_size: int = 32,
-    seed: int = 42,
-    device: torch.device | str | None = None,
-) -> Tuple[SimpleNet, List[float], List[float]]:
-    """Train *SimpleNet* on the provided dataset.
+    train_xy: Tuple[Tensor, Tensor],
+    val_xy: Tuple[Tensor, Tensor],
+    cfg: Dict,
+    save_path: Path | None = None,
+) -> Tuple[SimpleRegressor, Dict]:
+    """Train the model and return the trained instance + history.
 
     Parameters
     ----------
-    train_ds / val_ds : TensorDataset
-        Pre-processed training / validation splits.
-    epochs : int
-        Number of epochs.
-    lr : float
-        SGD learning-rate.
-    batch_size : int
-        Mini-batch size.
-    seed : int
-        RNG seed for reproducibility.
-    device : Union[torch.device, str, None]
-        Where to place the network («cuda» or «cpu»).
-
-    Returns
-    -------
-    model : SimpleNet – trained network (in *eval* mode)
-    tr_loss : list[float] – average training loss per epoch
-    val_loss : list[float] – average validation loss per epoch
+    train_xy / val_xy: Tuple containing (x, y) tensors.
+    cfg              : Dict with hyper-parameters.
+    save_path        : If given, serialises the trained weights.
     """
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    set_seed(cfg.get("seed", 0))
 
-    set_seed(seed)
+    x_tr, y_tr = train_xy
+    x_va, y_va = val_xy
 
-    if device is None:
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    if isinstance(device, str):
-        device = torch.device(device)
+    net = SimpleRegressor(cfg["hidden_dim"]).to(device)
+    opt = torch.optim.Adam(net.parameters(), lr=cfg["lr"])
+    loss_fn = nn.MSELoss()
 
-    net = SimpleNet(in_dim=train_ds.tensors[0].shape[1], out_dim=3).to(device)
-    optim = torch.optim.Adam(net.parameters(), lr=lr)
-    criterion = nn.CrossEntropyLoss()
+    dl = DataLoader(TensorDataset(x_tr, y_tr), batch_size=cfg["batch_size"], shuffle=True)
 
-    tr_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
-
-    tr_curve, val_curve = [], []
-
-    for epoch in range(1, epochs + 1):
-        # --- training -------------------------------------------------------
+    history = {"train_loss": [], "val_loss": []}
+    t0 = time.time()
+    for epoch in range(cfg["epochs"]):
         net.train()
-        epoch_loss = 0.0
-        for xb, yb in tr_loader:
+        for xb, yb in dl:
             xb, yb = xb.to(device), yb.to(device)
-            optim.zero_grad()
-            logits = net(xb)
-            loss = criterion(logits, yb)
+            opt.zero_grad()
+            pred = net(xb)
+            loss = loss_fn(pred, yb)
             loss.backward()
-            optim.step()
-            epoch_loss += loss.item() * xb.size(0)
-        tr_curve.append(epoch_loss / len(train_ds))
+            opt.step()
 
-        # --- validation -----------------------------------------------------
+        # log
         net.eval()
         with torch.no_grad():
-            v_loss = 0.0
-            for xb, yb in val_loader:
-                xb, yb = xb.to(device), yb.to(device)
-                logits = net(xb)
-                v_loss += criterion(logits, yb).item() * xb.size(0)
-        val_curve.append(v_loss / len(val_ds))
+            tr_loss = loss_fn(net(x_tr.to(device)), y_tr.to(device)).item()
+            va_loss = loss_fn(net(x_va.to(device)), y_va.to(device)).item()
+        history["train_loss"].append(tr_loss)
+        history["val_loss"].append(va_loss)
+        if (epoch + 1) % cfg["print_every"] == 0 or epoch == 0:
+            print(
+                f"Epoch {epoch+1:03d}/{cfg['epochs']} – "
+                f"train MSE: {tr_loss:.4f} – val MSE: {va_loss:.4f}"
+            )
 
-        # quick CLI feedback every 10 epochs
-        if epoch % 10 == 0 or epoch == epochs:
-            print(f"[train] epoch {epoch:3d}/{epochs} – loss: {tr_curve[-1]:.4f}  val: {val_curve[-1]:.4f}")
+    dur = time.time() - t0
+    print(f"Training finished in {dur:.1f} s. Best val MSE: {min(history['val_loss']):.4f}")
 
-    net.eval()
-    return net, tr_curve, val_curve
+    if save_path is not None:
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        torch.save(net.state_dict(), save_path)
+        print(f"Model weights saved → {save_path}")
+
+    return net, history

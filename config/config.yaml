@@ -1,0 +1,27 @@
+# Default experiment configuration for the minimal ACHyD prototype
+
+seed: 42
+
+# ------------------------------------------------------------------
+# Data parameters
+# ------------------------------------------------------------------
+data:
+  n_total: 2000     # total number of samples to generate
+  noise_std: 0.05   # standard deviation of observation noise
+
+# ------------------------------------------------------------------
+# Training hyperparameters
+# ------------------------------------------------------------------
+train:
+  seed: 42
+  hidden_dim: 32
+  lr: 1e-3
+  batch_size: 64
+  epochs: 200
+  print_every: 40
+
+# ------------------------------------------------------------------
+# Evaluation / visualisation parameters
+# ------------------------------------------------------------------
+eval:
+  seed: 42

@@ -1,50 +1,57 @@
 """
-evaluate.py – evaluation utilities used by src.main.  Currently provides a
-single *evaluate_model* helper that computes overall accuracy on the test
-set and returns both the numeric accuracy and per-sample predictions.
+evaluate.py – Evaluation & visualisation
+The script loads the trained model, evaluates on the held-out test set
+and produces a PDF figure suitable for academic publication.
+Figures are stored under ./.research/iteration15/images
 """
 from __future__ import annotations
 
-from typing import Tuple
+from pathlib import Path
+from typing import Dict, Tuple
 
-import numpy as np
-import torch
-from torch import nn
-from torch.utils.data import DataLoader, TensorDataset
+import matplotlib
 
-__all__ = ["evaluate_model"]
+matplotlib.use("Agg")  # head-less backend
+import matplotlib.pyplot as plt  # noqa: E402
+import seaborn as sns  # noqa: E402
+import torch  # noqa: E402
+from torch import Tensor  # noqa: E402
+
+from .utils import set_seed
+from .train import SimpleRegressor
+
+IMG_DIR = Path(".research/iteration15/images")
+IMG_DIR.mkdir(parents=True, exist_ok=True)
 
 
+@torch.no_grad()
 def evaluate_model(
-    model: nn.Module,
-    test_ds: TensorDataset,
-    batch_size: int = 64,
-    device: torch.device | str | None = None,
-) -> Tuple[float, np.ndarray]:
-    """Compute accuracy of *model* on *test_ds*.
+    model: SimpleRegressor,
+    test_xy: Tuple[Tensor, Tensor],
+    cfg: Dict,
+    model_name: str = "simple_regressor",
+) -> float:
+    """Return test MSE and create a prediction vs. ground truth plot."""
+    set_seed(cfg.get("seed", 0))
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.eval().to(device)
 
-    Returns
-    -------
-    acc : float – classification accuracy in the range [0, 1].
-    preds : np.ndarray – raw integer predictions for every sample.
-    """
-    if device is None:
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    if isinstance(device, str):
-        device = torch.device(device)
+    x_te, y_te = test_xy
+    x_te, y_te = x_te.to(device), y_te.to(device)
+    preds = model(x_te).cpu()
+    mse = torch.mean((preds - y_te.cpu()) ** 2).item()
 
-    loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False)
-    correct, total = 0, 0
-    all_preds = []
-    model.eval()
-    with torch.no_grad():
-        for xb, yb in loader:
-            xb, yb = xb.to(device), yb.to(device)
-            logits = model(xb)
-            pred = logits.argmax(dim=1)
-            all_preds.append(pred.cpu().numpy())
-            correct += (pred == yb).sum().item()
-            total += yb.size(0)
+    # ---------------- plot ----------------
+    sns.set_theme(style="white", font_scale=1.1)
+    plt.figure(figsize=(4, 4))
+    plt.scatter(x_te.cpu().numpy(), y_te.cpu().numpy(), s=10, label="ground truth")
+    plt.scatter(x_te.cpu().numpy(), preds.numpy(), s=10, label="prediction", alpha=0.7)
+    plt.xlabel("x")
+    plt.ylabel("y")
+    plt.legend(frameon=False)
+    plt.tight_layout()
+    out_f = IMG_DIR / f"{model_name}_pred_vs_gt.pdf"
+    plt.savefig(out_f, dpi=300, bbox_inches="tight")
+    print(f"Prediction figure saved → {out_f}")
 
-    acc = correct / total
-    return acc, np.concatenate(all_preds)
+    return mse
