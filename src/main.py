@@ -5,8 +5,8 @@ slightly refactored version of the original `run_experiments.py` so that
 it leverages the helpers living in *src.train*, *src.evaluate* and
 *src.preprocess* with only **relative imports** as required.
 
-All images are written to `.research/iteration3/images` as PDF – compliant
-with the given directory specification.
+All images are written to `.research/iteration4/images` as PDF – compliant
+with the updated directory specification.
 """
 from __future__ import annotations
 
@@ -48,7 +48,7 @@ DEFAULT_CFG = {
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Directory for plots --------------------------------------------------------
-IMG_DIR = Path(".research/iteration3/images")
+IMG_DIR = Path(".research/iteration4/images")
 IMG_DIR.mkdir(parents=True, exist_ok=True)
 
 # ---------------------------------------------------------------------------
