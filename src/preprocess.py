@@ -1,52 +1,61 @@
-"""src/preprocess.py
-Download / load the Iris dataset, perform a simple train-test split, standardise
-features, and persist them under ./data/ as compressed .npz files.
-The helper function `maybe_prepare_data()` is idempotent and safe to call
-multiple times.
+"""
+preprocess.py – data preparation
+Loads the iris data set via scikit-learn, splits it into train/val/test and
+stores the resulting tensors for fast re-use.  Also plots a simple pair plot
+(which can be useful for quick sanity checks).
 """
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Tuple
 
+import torch
 import numpy as np
-from sklearn import datasets
+import pandas as pd
+import matplotlib
+matplotlib.use("Agg")
+import seaborn as sns
+import matplotlib.pyplot as plt
+from sklearn.datasets import load_iris
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
-DATA_DIR = Path("data")
-DATA_DIR.mkdir(exist_ok=True, parents=True)
-
-TARGET_NAMES = ["setosa", "versicolor", "virginica"]
-
-TRAIN_NPZ = DATA_DIR / "iris_train.npz"
-TEST_NPZ = DATA_DIR / "iris_test.npz"
+ROOT = Path(__file__).resolve().parent.parent
+DATA_DIR = ROOT / "data"
+DATA_DIR.mkdir(exist_ok=True)
+IMG_DIR = ROOT / ".research" / "iteration11" / "images"
+IMG_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def _prepare() -> Tuple[dict, dict]:
-    iris = datasets.load_iris()
+def preprocess() -> None:
+    """Pre-process the Iris data set and save it as tensors."""
+    iris = load_iris()
     X = iris.data.astype(np.float32)
     y = iris.target.astype(np.int64)
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
-    )
+    # standardise features
+    scaler = StandardScaler()
+    X = scaler.fit_transform(X).astype(np.float32)
 
-    scaler = StandardScaler().fit(X_train)
-    X_train = scaler.transform(X_train).astype(np.float32)
-    X_test = scaler.transform(X_test).astype(np.float32)
+    # split – 60 % train, 20 % val, 20 % test
+    x_train, x_tmp, y_train, y_tmp = train_test_split(X, y, test_size=0.4, random_state=0, stratify=y)
+    x_val, x_test, y_val, y_test = train_test_split(x_tmp, y_tmp, test_size=0.5, random_state=0, stratify=y_tmp)
 
-    np.savez_compressed(TRAIN_NPZ, x=X_train, y=y_train)
-    np.savez_compressed(TEST_NPZ, x=X_test, y=y_test)
-    print("[preprocess] prepared Iris dataset → ./data/")
+    tensors = {
+        "x_train": torch.from_numpy(x_train),
+        "y_train": torch.from_numpy(y_train),
+        "x_val": torch.from_numpy(x_val),
+        "y_val": torch.from_numpy(y_val),
+        "x_test": torch.from_numpy(x_test),
+        "y_test": torch.from_numpy(y_test),
+    }
+    torch.save(tensors, DATA_DIR / "dataset.pt")
+    print(f"Pre-processed data saved → {(DATA_DIR / 'dataset.pt').relative_to(ROOT)}")
 
-    return {"x": X_train, "y": y_train}, {"x": X_test, "y": y_test}
-
-
-def maybe_prepare_data() -> Tuple[dict, dict]:
-    """Ensures pre-processed dataset files exist and returns them."""
-    if not (TRAIN_NPZ.exists() and TEST_NPZ.exists()):
-        return _prepare()
-    train = dict(np.load(TRAIN_NPZ))
-    test = dict(np.load(TEST_NPZ))
-    return train, test
+    # quick pair-plot – useful for inspection
+    df = pd.DataFrame(X, columns=iris.feature_names)
+    df["species"] = pd.Categorical.from_codes(y, iris.target_names)
+    sns.pairplot(df, hue="species", corner=True)
+    plt.tight_layout()
+    fig_path = IMG_DIR / "iris_pairplot.pdf"
+    plt.savefig(fig_path)
+    print(f"Pair plot saved → {fig_path.relative_to(ROOT)}")

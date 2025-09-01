@@ -1,67 +1,58 @@
-"""src/evaluate.py
-Evaluate the trained model on the held-out test set and produce a confusion
-matrix figure (PDF).
+"""
+evaluate.py – model evaluation & visualisation
+Loads the trained model and prints the test accuracy as well as a confusion
+matrix that is stored as a PDF suitable for inclusion in papers.
 """
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Tuple
 
-import numpy as np
 import torch
-from sklearn.metrics import confusion_matrix
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns
+from sklearn.metrics import confusion_matrix, classification_report
 
-from .preprocess import maybe_prepare_data, TARGET_NAMES
-from .train import IrisNet, MODELS_DIR, IMAGES_DIR
+from .train import SimpleMLP
+
+ROOT = Path(__file__).resolve().parent.parent
+DATA_DIR = ROOT / "data"
+MODEL_DIR = ROOT / "models"
+IMG_DIR = ROOT / ".research" / "iteration11" / "images"
+IMG_DIR.mkdir(parents=True, exist_ok=True)
 
 
-# ----------------------------------------------------------------------------
-
-def evaluate(model_path: Path | None = None) -> Tuple[float, Path]:
-    """Return (accuracy, confusion_matrix_path)."""
-    # ensure data present
-    _, test_npz = maybe_prepare_data()
-    X_test = torch.tensor(test_npz["x"], dtype=torch.float32)
-    y_test = torch.tensor(test_npz["y"], dtype=torch.long)
-
+def evaluate(model_path: Path | None = None) -> None:
     if model_path is None:
-        model_path = MODELS_DIR / "iris_net.pt"
-    checkpoint = torch.load(model_path, map_location="cpu")
+        model_path = MODEL_DIR / "model.pt"
+    if not model_path.exists():
+        raise FileNotFoundError("Trained model .pt file not found. Run training first.")
 
-    # Recreate network with the same hidden dimension that was used for training
-    hidden_dim: int = checkpoint.get("cfg", {}).get("hidden_dim", 16)
-    model = IrisNet(hidden_dim=hidden_dim)
-    model.load_state_dict(checkpoint["model_state"])
+    data = torch.load(DATA_DIR / "dataset.pt")
+    x_test = data["x_test"]
+    y_test = data["y_test"]
+
+    model = SimpleMLP(in_dim=x_test.shape[1])
+    model.load_state_dict(torch.load(model_path, map_location="cpu"))
     model.eval()
 
     with torch.no_grad():
-        preds = model(X_test).argmax(dim=1).numpy()
-        true = y_test.numpy()
-        acc = (preds == true).mean()
+        logits = model(x_test)
+        preds = logits.argmax(dim=1)
 
-    cm = confusion_matrix(true, preds, labels=range(len(TARGET_NAMES)))
+    cm = confusion_matrix(y_test.numpy(), preds.numpy())
+    report = classification_report(y_test.numpy(), preds.numpy(), digits=3)
 
-    # plot confusion matrix
+    print("\n==== TEST RESULTS ====")
+    print(report)
+
+    # ---- figure ----
     plt.figure(figsize=(4, 3))
-    sns.heatmap(
-        cm,
-        annot=True,
-        fmt="d",
-        cmap="Blues",
-        cbar=False,
-        xticklabels=TARGET_NAMES,
-        yticklabels=TARGET_NAMES,
-    )
+    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues")
     plt.xlabel("Predicted")
     plt.ylabel("True")
-    plt.title("Confusion Matrix")
     plt.tight_layout()
-    cm_path = IMAGES_DIR / "confusion_matrix.pdf"
-    plt.savefig(cm_path, bbox_inches="tight")
-
-    print(f"[evaluate] accuracy={acc * 100:.2f}%  confusion-matrix saved → {cm_path}")
-    return acc, cm_path
+    fig_path = IMG_DIR / "confusion_matrix.pdf"
+    plt.savefig(fig_path, bbox_inches="tight")
+    print(f"Confusion matrix saved → {fig_path.relative_to(ROOT)}")

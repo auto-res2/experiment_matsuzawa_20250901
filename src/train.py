@@ -1,141 +1,128 @@
-"""src/train.py
-Train a simple feed-forward neural network on the pre-processed dataset and
-save the trained model together with a training-loss figure (PDF).
+"""
+train.py – model training
+This module trains a very small feed-forward neural network on the
+(pre-)processed data that is written by `preprocess.py`.
+The trained model is stored under `models/model.pt`.
 """
 from __future__ import annotations
 
-import json
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, Dict, Any
 
-import numpy as np
 import torch
-import torch.nn as nn
-import torch.optim as optim
-import matplotlib
-matplotlib.use("Agg")  # head-less backend
-import matplotlib.pyplot as plt
+from torch import nn
+from torch.utils.data import DataLoader, TensorDataset
 import yaml
 
-# Relative import – obey project layout
-from .preprocess import DATA_DIR, maybe_prepare_data
+from .preprocess import preprocess
 
-# -----------------------------------------------------------------------------
-# Paths
-# -----------------------------------------------------------------------------
-MODELS_DIR = Path("models")
-IMAGES_DIR = Path(".research/iteration10/images")  # ← updated per requirements
-CONFIG_PATH = Path("config/config.yaml")
-
-MODELS_DIR.mkdir(parents=True, exist_ok=True)
-IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+# ---------------------------------------------------------------------------
+# Paths & constants
+# ---------------------------------------------------------------------------
+ROOT = Path(__file__).resolve().parent.parent
+DATA_DIR = ROOT / "data"
+MODEL_DIR = ROOT / "models"
+MODEL_DIR.mkdir(exist_ok=True)
+CONFIG_DIR = ROOT / "config"
 
 
-# -----------------------------------------------------------------------------
-# Simple feed-forward classifier
-# -----------------------------------------------------------------------------
-class IrisNet(nn.Module):
-    def __init__(self, input_dim: int = 4, hidden_dim: int = 16, output_dim: int = 3):
+class SimpleMLP(nn.Module):
+    """A tiny two-layer perceptron."""
+
+    def __init__(self, in_dim: int, hidden: int = 32, out_dim: int = 3):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
+            nn.Linear(in_dim, hidden),
             nn.ReLU(),
-            nn.Linear(hidden_dim, output_dim),
+            nn.Linear(hidden, out_dim),
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:  # type: ignore[override]
         return self.net(x)
 
 
-# -----------------------------------------------------------------------------
-# Utility
-# -----------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Helper
+# ---------------------------------------------------------------------------
 
-def _load_config() -> dict:
-    if CONFIG_PATH.exists():
-        with open(CONFIG_PATH) as f:
-            return yaml.safe_load(f)
-    # sensible defaults if no config provided
+def load_config() -> Dict[str, Any]:
+    cfg_path = CONFIG_DIR / "default.yaml"
+    if cfg_path.exists():
+        with open(cfg_path, "r", encoding="utf-8") as fp:
+            return yaml.safe_load(fp)
+    # sensible defaults
     return {
+        "batch_size": 64,
         "epochs": 50,
-        "batch_size": 32,
-        "lr": 1e-2,
-        "weight_decay": 0.0,
-        "hidden_dim": 16,
-        "seed": 42,
+        "lr": 1e-3,
+        "hidden": 32,
     }
 
 
-def _set_seed(seed: int) -> None:
-    np.random.seed(seed)
-    torch.manual_seed(seed)
+def build_loaders(x_train: torch.Tensor, y_train: torch.Tensor,
+                  x_val: torch.Tensor, y_val: torch.Tensor,
+                  batch_size: int) -> Tuple[DataLoader, DataLoader]:
+    train_ds = TensorDataset(x_train, y_train)
+    val_ds = TensorDataset(x_val, y_val)
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_ds, batch_size=batch_size)
+    return train_loader, val_loader
 
 
-# -----------------------------------------------------------------------------
-# Main train function called by src.main
-# -----------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Training API (called from src.main)
+# ---------------------------------------------------------------------------
 
-def train() -> Tuple[float, Path]:
-    """Entry point used by src.main.  Returns (final_accuracy, model_path)."""
-    cfg = _load_config()
-    _set_seed(cfg.get("seed", 0))
+def train() -> Path:
+    """High-level training wrapper.
+    Returns the path of the saved model.
+    """
+    cfg = load_config()
 
-    train_npz, test_npz = maybe_prepare_data()  # ensure data present
+    # make sure data exists – if not, run preprocessing
+    data_pt = DATA_DIR / "dataset.pt"
+    if not data_pt.exists():
+        preprocess()
 
-    X_train = torch.tensor(train_npz["x"], dtype=torch.float32)
-    y_train = torch.tensor(train_npz["y"], dtype=torch.long)
-    X_test = torch.tensor(test_npz["x"], dtype=torch.float32)
-    y_test = torch.tensor(test_npz["y"], dtype=torch.long)
+    data = torch.load(data_pt)
+    x_train = data["x_train"]
+    y_train = data["y_train"]
+    x_val = data["x_val"]
+    y_val = data["y_val"]
 
-    model = IrisNet(hidden_dim=cfg["hidden_dim"]).to(torch.device("cpu"))
+    model = SimpleMLP(in_dim=x_train.shape[1], hidden=cfg["hidden"], out_dim=3)
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=cfg["lr"], weight_decay=cfg["weight_decay"])
+    optimizer = torch.optim.Adam(model.parameters(), lr=cfg["lr"])
 
-    # mini-batch training
-    losses = []
-    N = X_train.shape[0]
-    batch_size = cfg["batch_size"]
-    epochs = cfg["epochs"]
+    train_loader, val_loader = build_loaders(x_train, y_train, x_val, y_val,
+                                             cfg["batch_size"])
 
-    for epoch in range(1, epochs + 1):
-        perm = torch.randperm(N)
-        for i in range(0, N, batch_size):
-            idx = perm[i : i + batch_size]
-            batch_x = X_train[idx]
-            batch_y = y_train[idx]
-
+    for epoch in range(cfg["epochs"]):
+        model.train()
+        epoch_loss = 0.0
+        for xb, yb in train_loader:
             optimizer.zero_grad()
-            logits = model(batch_x)
-            loss = criterion(logits, batch_y)
+            pred = model(xb)
+            loss = criterion(pred, yb)
             loss.backward()
             optimizer.step()
-        losses.append(loss.item())
-        if epoch % 10 == 0 or epoch == epochs:
-            print(f"[train] epoch {epoch:>3}/{epochs}  loss={loss.item():.4f}")
+            epoch_loss += loss.item() * xb.size(0)
+        epoch_loss /= len(train_loader.dataset)
 
-    # Plot training loss
-    plt.figure(figsize=(4, 3))
-    plt.plot(range(1, epochs + 1), losses, marker="o", linewidth=1.5)
-    plt.title("Training loss")
-    plt.xlabel("Epoch")
-    plt.ylabel("Cross-entropy")
-    plt.tight_layout()
-    loss_fig_path = IMAGES_DIR / "training_loss.pdf"
-    plt.savefig(loss_fig_path, bbox_inches="tight")
+        # validation
+        model.eval()
+        correct = 0
+        total = 0
+        with torch.no_grad():
+            for xb, yb in val_loader:
+                logits = model(xb)
+                pred_lbl = logits.argmax(dim=1)
+                correct += (pred_lbl == yb).sum().item()
+                total += yb.size(0)
+        val_acc = correct / total
+        print(f"Epoch {epoch+1:02d}/{cfg['epochs']}  loss={epoch_loss:.4f}  val_acc={val_acc:.3f}")
 
-    # Save model (include config for downstream use)
-    model_path = MODELS_DIR / "iris_net.pt"
-    torch.save({"model_state": model.state_dict(), "cfg": cfg}, model_path)
-    print(f"[train] model saved to {model_path.resolve()}")
-
-    # quick accuracy on train set (for logging)
-    with torch.no_grad():
-        preds = model(X_test).argmax(dim=1)
-        acc = (preds == y_test).float().mean().item()
-    print(f"[train] test accuracy after training ≈ {acc * 100:.2f}%")
-
-    # store small JSON summary next to model (optional)
-    summary_path = model_path.with_suffix(".json")
-    summary_path.write_text(json.dumps({"accuracy": acc, **cfg}, indent=2))
-
-    return acc, model_path
+    model_path = MODEL_DIR / "model.pt"
+    torch.save(model.state_dict(), model_path)
+    print(f"Model saved → {model_path.relative_to(ROOT)}")
+    return model_path

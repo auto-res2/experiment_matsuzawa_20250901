@@ -1,40 +1,36 @@
-"""src/main.py
-Project entry-point.  Run via
-    python -m src.main
-The script orchestrates preprocessing, training, evaluation, and logs results
-with academic-quality PDF figures saved under .research/iteration10/images.
+"""
+main.py – orchestration entry-point
+This module is executed via  `python -m src.main`  from the project root.
+It simply runs (1) preprocessing, (2) training, (3) evaluation, printing all
+relevant information to standard output so the user can inspect the results.
 """
 from __future__ import annotations
 
-import time
 from pathlib import Path
+import time
 
-from .preprocess import maybe_prepare_data
+from .preprocess import preprocess
 from .train import train
 from .evaluate import evaluate
 
-IMAGES_DIR = Path(".research/iteration10/images")  # ← updated path
-IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+ROOT = Path(__file__).resolve().parent.parent
 
 
 def main() -> None:
     t0 = time.time()
-    # 1. Pre-processing (idempotent)
-    maybe_prepare_data()
+    print("\n====================  ACHyD ‑ Minimal Demo Pipeline  ====================\n")
 
-    # 2. Train the model
-    acc_train, model_path = train()
+    print("[1/3] Pre-processing data …")
+    preprocess()
 
-    # 3. Evaluate
-    acc_test, _ = evaluate(model_path)
+    print("\n[2/3] Training model …")
+    model_path = train()
 
-    # 4. Print summary
-    print("\n================= SUMMARY =================")
-    print(f"Train accuracy (after final epoch): {acc_train * 100:.2f}%")
-    print(f"Test  accuracy: {acc_test  * 100:.2f}%")
-    print(f"Figures saved in: {IMAGES_DIR.resolve()}")
-    print(f"Total wall-clock time: {time.time() - t0:.1f} s")
-    print("===========================================")
+    print("\n[3/3] Evaluating model …")
+    evaluate(model_path)
+
+    dt = time.time() - t0
+    print(f"\nPipeline finished in {dt:.1f} s – all artefacts written to disk.\n")
 
 
 if __name__ == "__main__":
