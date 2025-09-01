@@ -1,56 +1,64 @@
-
+"""src/evaluate.py
+Evaluation helpers (metrics & plotting).
 """
-evaluate.py
-Evaluation and plotting helpers.
-"""
-from __future__ import annotations
-from typing import List, Dict, Any
 from pathlib import Path
+from typing import Iterable
 
-import torch
-import torch.nn as nn
-from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 import seaborn as sns
+import torch
+from torch.cuda.amp import autocast
 
-# -----------------------------------------------------------------------------
-#  Figure directory – all images are stored under `.research/iteration6/images`
-# -----------------------------------------------------------------------------
-FIG_DIR = Path(".research/iteration6/images")
-FIG_DIR.mkdir(parents=True, exist_ok=True)
+# paths
+FIG_DIR = Path("figures")
+FIG_DIR.mkdir(exist_ok=True)
 
-# -----------------------------------------------------------------------------
-#  Accuracy evaluation
-# -----------------------------------------------------------------------------
-@torch.no_grad()
-def evaluate(model: nn.Module, loader: DataLoader, device: str = "cpu") -> float:
+# ------------------------------------------------------------------
+#  Accuracy utility
+# ------------------------------------------------------------------
+
+def accuracy(model, loader: Iterable, device="cuda", is_nlp: bool = False):
+    """Compute top-1 accuracy on `loader`. Works for vision & NLP variants."""
     model.eval()
-    correct, total = 0, 0
-    for x, y in loader:
-        x, y = x.to(device), y.to(device)
-        with torch.cuda.amp.autocast(enabled=True):
-            logits = model(x)
-        pred = logits.argmax(dim=1)
-        correct += (pred == y).sum().item()
-        total += y.numel()
+    correct = total = 0
+    with torch.no_grad():
+        for batch in loader:
+            if not is_nlp:
+                x, y = batch
+                x = x.to(device)
+                y = y.to(device)
+                with autocast():
+                    logits = model(x)
+            else:
+                ids, mask, y = batch
+                ids = ids.to(device)
+                mask = mask.to(device)
+                y = y.to(device)
+                with autocast():
+                    logits = model(ids, mask)
+            pred = logits.argmax(1)
+            correct += (pred == y).sum().item()
+            total += y.numel()
     model.train()
-    return 100.0 * correct / total
+    return 100 * correct / total
 
-# -----------------------------------------------------------------------------
-#  Plotting
-# -----------------------------------------------------------------------------
+# ------------------------------------------------------------------
+#  Figure utility – line plot with value annotations
+# ------------------------------------------------------------------
 
-def plot_accuracy_curve(stats: List[Dict[str, Any]], title: str, filename: str):
-    tasks = [s['task'] for s in stats]
-    accs  = [s['accuracy'] for s in stats]
+def save_line(stats, title: str, fname: str):
+    tasks = [s["task"] for s in stats]
+    acc = [s["acc"] for s in stats]
     sns.set(style="whitegrid")
     plt.figure(figsize=(6, 4))
-    plt.plot(tasks, accs, marker='o', label='HydraMemory')
-    for t, a in zip(tasks, accs):
-        plt.text(t, a + 0.3, f"{a:.1f}", fontsize=8)
-    plt.xlabel('Task'); plt.ylabel('Accuracy (%)'); plt.title(title)
-    plt.legend(); plt.tight_layout()
-    pdf_path = FIG_DIR / f"{filename}.pdf"
-    plt.savefig(pdf_path, bbox_inches="tight")
-    print(f"Saved figure: {pdf_path}")
+    plt.plot(tasks, acc, marker="o")
+    for t, a in zip(tasks, acc):
+        plt.text(t, a + 0.4, f"{a:.1f}", fontsize=8)
+    plt.xlabel("Task")
+    plt.ylabel("Accuracy (%)")
+    plt.title(title)
+    plt.tight_layout()
+    path = FIG_DIR / fname
+    plt.savefig(path, bbox_inches="tight")
     plt.close()
+    print(f"Figure saved: {path}")

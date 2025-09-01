@@ -1,121 +1,122 @@
-
-"""
-train.py
-Core training utilities, model components and HydraMemory buffers.
+"""src/train.py
+Training-related components: buffers, decoders, backbones and the core
+HydraMemory training loop.
 """
 from __future__ import annotations
-import math
-import random
-from dataclasses import dataclass
-from typing import Any, List, Tuple, Dict
+import math, random
+from typing import Any, Tuple
+from pathlib import Path
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import DataLoader
+from torch.cuda.amp import autocast, GradScaler
+import torchvision
 
-# -------------------------------------------------------------
-#  GLOBALS
-# -------------------------------------------------------------
-DEVICE_DEFAULT = "cuda" if torch.cuda.is_available() else "cpu"
+# ────────────────────────────────────────────────────────────────────
+#  GLOBALS & UTILITIES
+# ────────────────────────────────────────────────────────────────────
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-# -------------------------------------------------------------
-#  Reproducibility
-# -------------------------------------------------------------
+# -----------------------------------------------------------
+#  Reproducibility helpers
+# -----------------------------------------------------------
 
 def set_seed(seed: int):
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
 
-# -------------------------------------------------------------
-#  Reservoir sampler helper
-# -------------------------------------------------------------
-class ReservoirSampler:
-    """Reservoir sampler that keeps at most `capacity` samples."""
+
+def bytes_to_human(n: int) -> str:
+    if n < 1024:
+        return f"{n} B"
+    if n < 1024 ** 2:
+        return f"{n / 1024:.1f} KB"
+    return f"{n / 1024 ** 2:.2f} MB"
+
+# ────────────────────────────────────────────────────────────────────
+#  Reservoir buffer (generic) & Hydra-specific sign-sketch buffer
+# ────────────────────────────────────────────────────────────────────
+
+class Reservoir:
     def __init__(self, capacity: int):
         self.capacity = capacity
         self.n_seen = 0
-        self.buffer: List[Any] = []
+        self.buf: list[Any] = []
 
-    def add(self, item: Any):
+    def add(self, item):
         self.n_seen += 1
-        if len(self.buffer) < self.capacity:
-            self.buffer.append(item)
+        if len(self.buf) < self.capacity:
+            self.buf.append(item)
         else:
             j = random.randrange(self.n_seen)
             if j < self.capacity:
-                self.buffer[j] = item
+                self.buf[j] = item
 
-    def sample(self, k: int) -> List[Any]:
-        k = min(k, len(self.buffer))
-        return random.sample(self.buffer, k)
+    def sample(self, k: int):
+        k = min(k, len(self.buf))
+        return random.sample(self.buf, k)
 
-# -------------------------------------------------------------
-#  HydraMemory components
-# -------------------------------------------------------------
+    def __len__(self):
+        return len(self.buf)
+
+
 class HydraSketchBuffer:
-    """Stores sign sketches + labels with reservoir sampling."""
-    def __init__(self, latent_dim: int, bitwidth: int, max_items: int, device: str = DEVICE_DEFAULT):
+    """Binary sign-sketch + label storage using reservoir sampling."""
+
+    def __init__(self, latent_dim: int, bitwidth: int, max_items: int, device=DEVICE):
         self.bitwidth = bitwidth
         self.latent_dim = latent_dim
         self.device = device
-        # Make sure the PRNG lives on the same device as the target tensor to avoid
-        # "generator on cpu vs tensor on cuda" errors with newer PyTorch versions.
-        rng = torch.Generator(device=device).manual_seed(0)
-        self.R = torch.randint(0, 2, (latent_dim, bitwidth), generator=rng,
-                               device=device, dtype=torch.float32)
-        self.R[self.R == 0] = -1.0
-        self.sampler = ReservoirSampler(max_items)
 
-    # Allow `.to(device)` like nn.Module for convenience
-    def to(self, device: str):
-        self.device = device
-        self.R = self.R.to(device)
-        return self
+        # fixed ±1 random projection
+        g = torch.Generator().manual_seed(0)
+        R = torch.randint(0, 2, (latent_dim, bitwidth), generator=g, dtype=torch.float16, device=device)
+        R[R == 0] = -1
+        self.proj = R  # register as ordinary attribute (no .register_buffer for simplicity)
 
-    @torch.no_grad()
-    def _to_bits(self, z: torch.Tensor) -> torch.Tensor:
-        """Project latent vectors to sign sketches (binary codes).
+        self.reservoir = Reservoir(max_items)
 
-        Autocast can produce fp16/bf16 latents while `self.R` is fp32. Cast the
-        latent to the projection matrix's dtype to avoid dtype mismatch errors.
-        """
-        z = z.to(dtype=self.R.dtype)
-        proj = torch.sign(z @ self.R)  # (batch, b)
-        bits = (proj < 0).to(torch.uint8)
-        return bits
+    # -------- memory accounting --------
+    @property
+    def bytes_per_item(self):
+        return self.bitwidth // 8  # 1 bit per entry
 
-    def add_batch(self, z: torch.Tensor, y: torch.Tensor):
-        """Insert a batch of latent vectors and labels into the reservoir."""
-        # Ensure computation happens on the buffer's device to avoid device mismatch
-        z = z.to(self.device)
-        bits = self._to_bits(z).cpu()  # move to CPU for cheap storage after projection
-        for s, lbl in zip(bits, y.detach().cpu()):
-            self.sampler.add((s, int(lbl)))
-
-    def sample(self, k: int):
-        samples = self.sampler.sample(k)
-        if not samples:
-            raise RuntimeError("Hydra buffer empty – cannot sample.")
-        bits, lbls = zip(*samples)
-        bits = torch.stack(bits).to(self.device).float()
-        bits[bits == 0] = -1
-        labels = torch.tensor(lbls, device=self.device, dtype=torch.long)
-        return bits, labels
+    @property
+    def total_bytes(self):
+        return len(self) * self.bytes_per_item
 
     def __len__(self):
-        return len(self.sampler.buffer)
+        return len(self.reservoir)
+
+    # -----------------------------------
+    @torch.no_grad()
+    def add_batch(self, z: torch.Tensor, y: torch.Tensor):
+        """Store a batch of latent vectors + labels as binary sketches."""
+        bits = torch.sign(z @ self.proj).cpu().to(torch.int8)  # −1/1 → int8
+        for s, lbl in zip(bits, y.cpu()):
+            self.reservoir.add((s, int(lbl)))
+
+    def sample(self, k: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        samples = self.reservoir.sample(k)
+        s, y = zip(*samples)
+        s = torch.stack(s).to(self.device).float()
+        y = torch.tensor(y, dtype=torch.long, device=self.device)
+        return s, y
+
+# ────────────────────────────────────────────────────────────────────
+#  Adaptive decoder (LoRA-MLP)
+# ────────────────────────────────────────────────────────────────────
 
 class LoRALinear(nn.Module):
-    """Very small LoRA adapter: W = W0 + A @ B (rank=r)."""
     def __init__(self, in_f: int, out_f: int, r: int = 4):
         super().__init__()
-        self.weight = nn.Parameter(torch.randn(out_f, in_f) * 0.02)
+        self.weight = nn.Parameter(torch.empty(out_f, in_f))
+        nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
+
         self.A = nn.Parameter(torch.zeros(r, in_f))
         self.B = nn.Parameter(torch.zeros(out_f, r))
         nn.init.kaiming_uniform_(self.A, a=math.sqrt(5))
@@ -124,143 +125,150 @@ class LoRALinear(nn.Module):
     def forward(self, x):
         return F.linear(x, self.weight + self.B @ self.A)
 
+
 class AdaptiveDecoder(nn.Module):
-    """Tiny MLP that reconstructs latent vector from sign sketch."""
     def __init__(self, bitwidth: int, latent_dim: int, lora_rank: int = 4):
         super().__init__()
         hidden = 2 * latent_dim
-        self.fc1 = LoRALinear(bitwidth, hidden, r=lora_rank)
-        self.fc2 = LoRALinear(hidden, latent_dim, r=lora_rank)
-        self.act = nn.ReLU()
+        self.fc1 = LoRALinear(bitwidth, hidden, lora_rank)
+        self.fc2 = LoRALinear(hidden, latent_dim, lora_rank)
 
     def forward(self, s):
-        h = self.act(self.fc1(s))
+        h = F.relu(self.fc1(s))
         return self.fc2(h)
 
-# -------------------------------------------------------------
-#  Backbones
-# -------------------------------------------------------------
-import torchvision
+# ────────────────────────────────────────────────────────────────────
+#  Backbone models with explicit split-points
+# ────────────────────────────────────────────────────────────────────
 
-class ResNetFeatureWrapper(nn.Module):
-    """Exposes forward_to_layer / from_layer around layer3 of ResNet-18.
+class ResNetSplit(nn.Module):
+    """ResNet-18 up to penultimate average-pooled output + classifier head."""
 
-    We stop the network after `layer3` (instead of the full `layer4`) to obtain
-    a smaller  feature representation (256 dims for vanilla ResNet-18).  The
-    classifier layer dimensionality is inferred automatically so that the
-    wrapper remains valid even if the underlying backbone width changes (e.g.,
-    in drift experiments).
-    """
-    def __init__(self, base: torchvision.models.ResNet, num_classes: int):
+    def __init__(self, num_classes: int):
         super().__init__()
-        self.base = base
-        # Remove the original FC head – we will add our own classifier.
-        self.base.fc = nn.Identity()
+        self.body = torchvision.models.resnet18(weights=None)
+        self.body.fc = nn.Identity()
+        self.classifier = nn.Linear(512, num_classes)
 
-        # Infer feature dimension after `layer3`.
-        with torch.no_grad():
-            dummy = torch.zeros(1, 3, 32, 32)
-            feat_dim = self._forward_to_layer_only(dummy).shape[1]
-        self.feature_dim: int = feat_dim
-        self.classifier = nn.Linear(self.feature_dim, num_classes)
-
-    # Internal helper used during construction (does *not* use self.classifier).
-    def _forward_to_layer_only(self, x):
-        x = self.base.conv1(x)
-        x = self.base.bn1(x)
-        x = self.base.relu(x)
-        x = self.base.maxpool(x)
-        x = self.base.layer1(x)
-        x = self.base.layer2(x)
-        x = self.base.layer3(x)
+    # feature-extractor (fₜₕₑₜₐ → h)
+    def f_to_h(self, x):
+        x = self.body.conv1(x)
+        x = self.body.bn1(x)
+        x = self.body.relu(x)
+        x = self.body.maxpool(x)
+        x = self.body.layer1(x)
+        x = self.body.layer2(x)
+        x = self.body.layer3(x)
         x = F.adaptive_avg_pool2d(x, 1).flatten(1)
-        return x
+        return x  # 512-D
 
-    # Public API
-    def forward_to_layer(self, x):
-        return self._forward_to_layer_only(x)
-
-    def forward_from_layer(self, z):
-        return self.classifier(z)
+    # classifier (h → ŷ)
+    def h_to_y(self, h):
+        return self.classifier(h)
 
     def forward(self, x):
-        z = self.forward_to_layer(x)
-        return self.forward_from_layer(z)
+        return self.h_to_y(self.f_to_h(x))
+
 
 class SimpleMLP(nn.Module):
-    def __init__(self, in_dim: int = 28 * 28, hidden: int = 256, num_classes: int = 10):
-        super().__init__()
-        self.fc1 = nn.Linear(in_dim, hidden)
-        self.fc2 = nn.Linear(hidden, hidden)
-        self.head = nn.Linear(hidden, num_classes)
-        # Expose representation size so that callers can infer it automatically.
-        self.feature_dim: int = hidden
+    """2-layer MLP for (Permuted-)MNIST."""
 
-    def forward_to_layer(self, x):
+    def __init__(self, n_class: int = 10):
+        super().__init__()
+        self.fc1 = nn.Linear(28 * 28, 256)
+        self.fc2 = nn.Linear(256, 256)
+        self.head = nn.Linear(256, n_class)
+
+    def f_to_h(self, x):
         x = x.view(x.size(0), -1)
         x = F.relu(self.fc1(x))
         return F.relu(self.fc2(x))
 
-    def forward_from_layer(self, z):
-        return self.head(z)
+    def h_to_y(self, h):
+        return self.head(h)
 
     def forward(self, x):
-        z = self.forward_to_layer(x)
-        return self.forward_from_layer(z)
+        return self.h_to_y(self.f_to_h(x))
 
-# -------------------------------------------------------------
-#  Training loop for HydraMemory
-# -------------------------------------------------------------
 
-def train_stream_hydra(stream,
-                       model: nn.Module,
-                       buffer: HydraSketchBuffer,
-                       decoder: AdaptiveDecoder,
-                       opt: torch.optim.Optimizer,
-                       dec_opt: torch.optim.Optimizer,
-                       sched,
-                       epochs_per_task: int = 1,
-                       replay_ratio: float = 0.5,
-                       device: str = DEVICE_DEFAULT):
-    from tqdm import tqdm  # local import to keep requirement
-    import torch.cuda.amp as amp
+class DistilSplit(nn.Module):
+    """DistilBERT split after encoder; classifier added on top."""
 
-    scaler = amp.GradScaler()
-    stats: List[Dict[str, Any]] = []
+    def __init__(self, n_class: int = 2):
+        super().__init__()
+        from transformers import DistilBertModel  # local import avoids heavy global load if unused
+        self.bert = DistilBertModel.from_pretrained("distilbert-base-uncased")
+        self.classifier = nn.Linear(768, n_class)
 
-    for task_id, loader in enumerate(stream):
-        print(f"\n=== Training task {task_id} ===")
-        for epoch in range(epochs_per_task):
-            for imgs, labels in tqdm(loader, desc=f"task{task_id}"):
-                imgs, labels = imgs.to(device), labels.to(device)
-                with amp.autocast(enabled=True):
-                    z = model.forward_to_layer(imgs)
-                buffer.add_batch(z, labels)
+    def f_to_h(self, ids, mask):
+        h = self.bert(ids, attention_mask=mask).last_hidden_state[:, 0]
+        return h
 
-                replay_k = int(replay_ratio * imgs.size(0))
-                if len(buffer) >= replay_k and replay_k > 0:
-                    s_bits, y_rep = buffer.sample(replay_k)
-                    with amp.autocast(enabled=True):
-                        z_tilde = decoder(s_bits)
-                        logits_rep = model.forward_from_layer(z_tilde)
-                else:
-                    logits_rep, y_rep = None, None
+    def h_to_y(self, h):
+        return self.classifier(h)
 
-                with amp.autocast(enabled=True):
-                    logits_cur = model.forward_from_layer(z)
-                    loss_cur = F.cross_entropy(logits_cur, labels)
-                    loss_rep = F.cross_entropy(logits_rep, y_rep) if logits_rep is not None else 0.0
-                    loss = loss_cur + loss_rep
+    def forward(self, ids, mask):
+        return self.h_to_y(self.f_to_h(ids, mask))
 
-                opt.zero_grad(); dec_opt.zero_grad()
-                scaler.scale(loss).backward()
-                scaler.step(opt); scaler.step(dec_opt)
-                scaler.update()
-                sched.step()
+# ────────────────────────────────────────────────────────────────────
+#  Training loop (vision variant)
+# ────────────────────────────────────────────────────────────────────
 
-        # evaluation after task – defer to evaluate module to avoid circular import
-        from .evaluate import evaluate
-        acc = evaluate(model, stream.test_loader(task_id), device)
-        print(f"Task {task_id} completed – accuracy so far: {acc:.2f}%")
-        stats.append(dict(task=task_id, accuracy=acc, buffer_len=len(buffer)))
-    return stats
+scaler = GradScaler()
+
+
+def hydra_train_vision(
+    stream,
+    model: ResNetSplit,
+    buffer: HydraSketchBuffer,
+    decoder: AdaptiveDecoder,
+    optimizer: torch.optim.Optimizer,
+    dec_opt: torch.optim.Optimizer,
+    scheduler: torch.optim.lr_scheduler._LRScheduler,
+    replay_beta: float,
+    device: str = DEVICE,
+):
+    """Train `model` on an incremental task stream using HydraMemory."""
+
+    from src.evaluate import accuracy  # avoid circular import at top level
+
+    task_stats = []
+    for t, loader in enumerate(stream):
+        for images, labels in loader:
+            images, labels = images.to(device), labels.to(device)
+            with autocast():
+                h_cur = model.f_to_h(images)
+            buffer.add_batch(h_cur, labels)
+
+            # replay
+            n_replay = int(replay_beta * images.size(0))
+            if len(buffer) >= n_replay > 0:
+                s_bits, y_rep = buffer.sample(n_replay)
+                with autocast():
+                    h_rep = decoder(s_bits)
+                    logits_rep = model.h_to_y(h_rep)
+            else:
+                logits_rep = None
+                y_rep = None
+
+            with autocast():
+                logits_cur = model.h_to_y(h_cur)
+            loss = F.cross_entropy(logits_cur, labels)
+            if logits_rep is not None:
+                loss = loss + F.cross_entropy(logits_rep, y_rep)
+
+            optimizer.zero_grad()
+            dec_opt.zero_grad()
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.step(dec_opt)
+            scaler.update()
+            scheduler.step()
+
+        acc = accuracy(model, stream.test_loader(t), device)
+        task_stats.append({"task": t, "acc": acc, "buffer_items": len(buffer)})
+        print(
+            f"Task {t} done – ACC={acc:.2f}% – buffer={len(buffer)} items (" + bytes_to_human(buffer.total_bytes) + ")"
+        )
+
+    return task_stats

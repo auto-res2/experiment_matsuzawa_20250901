@@ -1,13 +1,13 @@
 torch
 torchvision
 torchaudio
-torcheval
+transformers
+datasets
 fvcore
 scikit-learn
 pandas
 matplotlib
 seaborn
-pillow
 tqdm
-jpeg4py
+pynvml
 numpy
