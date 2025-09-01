@@ -79,12 +79,16 @@ class HydraSketchBuffer:
 
     @torch.no_grad()
     def _to_bits(self, z: torch.Tensor) -> torch.Tensor:
+        """Project latent vectors to sign sketches (binary codes)."""
         proj = torch.sign(z @ self.R)  # (batch, b)
         bits = (proj < 0).to(torch.uint8)
         return bits
 
     def add_batch(self, z: torch.Tensor, y: torch.Tensor):
-        bits = self._to_bits(z.detach().cpu())
+        """Insert a batch of latent vectors and labels into the reservoir."""
+        # Ensure computation happens on the buffer's device to avoid device mismatch
+        z = z.to(self.device)
+        bits = self._to_bits(z).cpu()  # move to CPU for cheap storage after projection
         for s, lbl in zip(bits, y.detach().cpu()):
             self.sampler.add((s, int(lbl)))
 
