@@ -18,7 +18,7 @@ from .evaluate import evaluate
 # ----------------------------------------------------------------------------
 # Helper
 # ----------------------------------------------------------------------------
-IMAGES_DIR = Path(".research/iteration5/images")
+IMAGES_DIR = Path(".research/iteration6/images")
 MODELS_DIR = Path("models")
 
 
@@ -66,7 +66,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser("Toy DHAC experiment")
     parser.add_argument(
         "--config",
-        default="config/params.yaml",
+        default="config/config.yaml",
         type=Path,
         help="Path to the YAML config file.",
     )

@@ -31,7 +31,8 @@ class SimpleCNN(nn.Module):
             nn.MaxPool2d(2),
             nn.Flatten(),
         )
-        self.head = nn.Linear(64 * 8 * 8, n_classes)
+        # For 28×28 inputs (MNIST after padding) we end up with 7×7 feature maps
+        self.head = nn.Linear(64 * 7 * 7, n_classes)
 
     def forward(self, x: torch.Tensor):  # type: ignore[override]
         return self.head(self.body(x))
@@ -72,10 +73,11 @@ def train(
     train_loss_hist: List[float] = []
     val_acc_hist: List[float] = []
 
-    for epoch in range(1, cfg.get("epochs", 5) + 1):
+    num_epochs = cfg.get("epochs", 5)
+    for epoch in range(1, num_epochs + 1):
         model.train()
         running = 0.0
-        for x, y in tqdm(train_loader, desc=f"Epoch {epoch}/{cfg['epochs']}"):
+        for x, y in tqdm(train_loader, desc=f"Epoch {epoch}/{num_epochs}"):
             x = x.to(device)
             y = y.to(device)
             optimizer.zero_grad()
