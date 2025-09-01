@@ -1,0 +1,54 @@
+Warning: Gym version v0.24.1 has a number of critical issues with `gym.make` such that the `reset` and `step` functions are called before returning the environment. It is recommend to downgrading to v0.23.1 or upgrading to v0.25.1
+Additionally, Gym has been unmaintained since 2022 and does not support NumPy 2.0 amongst other critical functionality.
+Please upgrade to Gymnasium, the maintained drop-in replacement of Gym, or contact the authors of your software and request that they upgrade.
+See the migration guide at https://gymnasium.farama.org/introduction/migration_guide/ for additional information.
+
+You appear to be missing MuJoCo.  We expected to find the file here: /home/runner/.mujoco/mujoco210
+
+This package only provides python bindings, the library must be installed separately.
+
+Please follow the instructions on the README to install MuJoCo
+
+    https://github.com/openai/mujoco-py#install-mujoco
+
+Which can be downloaded from the website
+
+    https://www.roboti.us/index.html
+
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/runner/work/experiment_matsuzawa_20250901/experiment_matsuzawa_20250901/src/main.py", line 219, in <module>
+    main()
+  File "/home/runner/work/experiment_matsuzawa_20250901/experiment_matsuzawa_20250901/src/main.py", line 209, in main
+    df1 = run_experiment1()
+          ^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/experiment_matsuzawa_20250901/experiment_matsuzawa_20250901/src/main.py", line 78, in run_experiment1
+    import d4rl  # noqa: F401
+    ^^^^^^^^^^^
+  File "/home/runner/work/_tool/Python/3.11.13/x64/lib/python3.11/site-packages/d4rl/__init__.py", line 14, in <module>
+    import d4rl.locomotion
+  File "/home/runner/work/_tool/Python/3.11.13/x64/lib/python3.11/site-packages/d4rl/locomotion/__init__.py", line 2, in <module>
+    from d4rl.locomotion import ant
+  File "/home/runner/work/_tool/Python/3.11.13/x64/lib/python3.11/site-packages/d4rl/locomotion/ant.py", line 20, in <module>
+    import mujoco_py
+  File "/home/runner/work/_tool/Python/3.11.13/x64/lib/python3.11/site-packages/mujoco_py/__init__.py", line 2, in <module>
+    from mujoco_py.builder import cymj, ignore_mujoco_warnings, functions, MujocoException
+  File "/home/runner/work/_tool/Python/3.11.13/x64/lib/python3.11/site-packages/mujoco_py/builder.py", line 503, in <module>
+    mujoco_path = discover_mujoco()
+                  ^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/_tool/Python/3.11.13/x64/lib/python3.11/site-packages/mujoco_py/utils.py", line 78, in discover_mujoco
+    raise Exception(message)
+Exception: 
+You appear to be missing MuJoCo.  We expected to find the file here: /home/runner/.mujoco/mujoco210
+
+This package only provides python bindings, the library must be installed separately.
+
+Please follow the instructions on the README to install MuJoCo
+
+    https://github.com/openai/mujoco-py#install-mujoco
+
+Which can be downloaded from the website
+
+    https://www.roboti.us/index.html
+
