@@ -1,54 +1,73 @@
-"""
-main.py – Entry point executed via `python -m src.main`.
-Implements the end-to-end pipeline: preprocessing → training → evaluation.
-Detailed results are printed to stdout as required.
+"""src/main.py
+--------------
+Entry-point for the experiment – invoked via `python -m src.main`.
+It orchestrates the whole pipeline:
+  1. Loads hyper-parameters from `config/config.yaml` (creates a reasonable
+     default if the file is missing).
+  2. Calls `src.train.train_model`.
+  3. Evaluates the trained model via `src.evaluate.evaluate`.
+  4. Generates a PDF figure with training/validation curves and stores it in
+     `.research/iteration18/images` as mandated.
+  5. Writes a small summary of the results to *stdout*.
+
+The code purposefully avoids any external dependencies beyond the ones listed
+in `requirements.txt` and PyTorch/torchvision.
 """
 from __future__ import annotations
-
-import argparse
+import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Dict
 
+import matplotlib
+matplotlib.use("Agg")  # headless back-ends are safer on servers/CI
+import matplotlib.pyplot as plt
 import yaml
 
-from . import evaluate as ev
-from . import preprocess as pp
-from . import train as tr
+from .train import train_model
+from .evaluate import evaluate
 
-CFG_DIR = Path("config")
-DEFAULT_CFG = CFG_DIR / "config.yaml"  # adjusted to match the provided file name
+# -----------------------------------------------------------------------------
+# 1) Configuration handling
+# -----------------------------------------------------------------------------
+CONFIG_DIR = Path("config"); CONFIG_DIR.mkdir(exist_ok=True)
+CFG_FILE = CONFIG_DIR / "config.yaml"
 
+def _default_cfg() -> Dict:
+    return {
+        "batch_size": 128,
+        "epochs": 5,
+        "lr": 1e-3,
+        "val_split": 0.1,
+    }
 
-def load_cfg(path: Path | str | None) -> Dict[str, Any]:
-    """Load YAML config, falling back to the default configuration."""
-    if path is None:
-        path = DEFAULT_CFG
-    path = Path(path)
-    if not path.exists():
-        raise FileNotFoundError(f"Config file not found: {path}")
-    print(f"Using configuration: {path}")
-    return yaml.safe_load(path.read_text())
+if CFG_FILE.exists():
+    cfg = yaml.safe_load(CFG_FILE.read_text())
+else:
+    cfg = _default_cfg()
+    CFG_FILE.write_text(yaml.safe_dump(cfg))
+    print("[INFO] Default config.yaml created – feel free to edit and re-run.")
 
+print("[INFO] Config:", json.dumps(cfg, indent=2))
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="End-to-end ACHyD prototype experiment")
-    parser.add_argument("--cfg", type=str, default=None, help="Path to YAML config file")
-    args = parser.parse_args()
+# -----------------------------------------------------------------------------
+# 2) Run the pipeline
+# -----------------------------------------------------------------------------
+model, train_losses, val_losses = train_model(cfg)
+acc = evaluate(model, batch_size=cfg["batch_size"])
+print(json.dumps({"test_accuracy": acc}))
 
-    cfg = load_cfg(args.cfg)
-
-    # 1) preprocessing
-    train_xy, val_xy, test_xy = pp.make_dataset(cfg["data"])
-    print("Data statistics →", {k: v[0].shape[0] for k, v in zip(["train", "val", "test"], (train_xy, val_xy, test_xy))})
-
-    # 2) training
-    model_save = Path("models/simple_regressor.pt")
-    model, history = tr.train_model(train_xy, val_xy, cfg["train"], save_path=model_save)
-
-    # 3) evaluation
-    mse = ev.evaluate_model(model, test_xy, cfg["eval"])
-    print(f"\n===== FINAL RESULTS =====\nTest MSE: {mse:.4f}\n=========================")
-
-
-if __name__ == "__main__":
-    main()
+# -----------------------------------------------------------------------------
+# 3) Visualisation – save as PDF for publication quality
+# -----------------------------------------------------------------------------
+img_dir = Path(".research/iteration18/images")
+img_dir.mkdir(parents=True, exist_ok=True)
+plt.figure(figsize=(6, 3))
+plt.plot(train_losses, label="Train loss")
+plt.plot(val_losses, label="Validation loss")
+plt.xlabel("Epoch")
+plt.ylabel("Cross-entropy loss")
+plt.legend()
+plt.tight_layout()
+fig_path = img_dir / "mnist_loss_curves.pdf"
+plt.savefig(fig_path, dpi=300, bbox_inches="tight")
+print(f"[INFO] Training curves saved → {fig_path.relative_to(Path('.').resolve())}")

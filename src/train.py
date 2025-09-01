@@ -1,130 +1,105 @@
+"""src/train.py
+-----------------
+Contains the training loop used by `src.main`.  The trainer is deliberately
+kept very small so that the whole project can be executed on a single GPU/CPU
+within the evaluation time-limit while still demonstrating the full pipeline
+(pre-processing → training → evaluation → visualisation).
 
-"""
-train.py – Training utilities for a toy regression task
-The goal is to keep the code base minimal but still demonstrate the
-complete research-style pipeline requested in the Instructions.
-The model learns y = 2x + ε from synthetic data generated in
-preprocess.py.  Training artefacts are stored under ./models.
+The example trains a simple two-layer MLP on the MNIST classification task
+(downloaded automatically by `src.preprocess`).  All parameters such as the
+number of epochs, learning-rate, etc. are provided by the `config.yaml` file
+loaded in `src.main`.
 """
 from __future__ import annotations
-
-import os
-import random
-import time
+import json
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict, List, Tuple
 
-import numpy as np
 import torch
-from torch import Tensor, nn
-from torch.utils.data import DataLoader, TensorDataset
+from torch import nn
+from torch.utils.data import DataLoader, random_split
+from torchvision.datasets import MNIST
+from torchvision import transforms
 
-# -----------------------------------------------------------------------------
-# Re-usable utility – falls back to local definition if src.utils is unavailable
-# -----------------------------------------------------------------------------
-try:
-    from .utils import set_seed  # type: ignore
-except ModuleNotFoundError:  # pragma: no cover – local fallback for robustness
+from .preprocess import prepare_datasets
 
-    def set_seed(seed: int | None = None) -> None:  # noqa: D401 (plain docstring)
-        """Set random seeds for reproducibility (torch / numpy / python)."""
-        if seed is None:
-            return
-        os.environ["PYTHONHASHSEED"] = str(seed)
-        random.seed(seed)
-        np.random.seed(seed)
-        torch.manual_seed(seed)
-        if torch.cuda.is_available():
-            torch.cuda.manual_seed_all(seed)
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-# -----------------------------------------------------------------------------
-# Model definition
-# -----------------------------------------------------------------------------
-class SimpleRegressor(nn.Module):
-    """A two-layer perceptron for 1-D regression."""
+class MLP(nn.Module):
+    """A very small two-layer perceptron for 28×28 images."""
 
-    def __init__(self, hidden_dim: int = 32):
+    def __init__(self, in_dim: int = 28 * 28, hidden: int = 256, n_classes: int = 10):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(1, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, 1),
+            nn.Linear(in_dim, hidden),
+            nn.ReLU(inplace=True),
+            nn.Linear(hidden, n_classes),
         )
 
-    def forward(self, x: Tensor) -> Tensor:  # noqa: D401 (plain docstring)
-        """Forward pass."""
+    def forward(self, x: torch.Tensor) -> torch.Tensor:  # noqa: D401 – simple forward
+        x = x.flatten(start_dim=1)
         return self.net(x)
 
 
-# -----------------------------------------------------------------------------
-# Training routine
-# -----------------------------------------------------------------------------
+def train_model(cfg: Dict) -> Tuple[nn.Module, List[float], List[float]]:
+    """Train the model and return (model, train_losses, val_losses)."""
 
-def train_model(
-    train_xy: Tuple[Tensor, Tensor],
-    val_xy: Tuple[Tensor, Tensor],
-    cfg: Dict,
-    save_path: Path | None = None,
-) -> Tuple[SimpleRegressor, Dict]:
-    """Train the model and return the trained instance + history.
+    # ------------------------------------------------------------------
+    # 1) Data
+    # ------------------------------------------------------------------
+    data_root = Path("data")
+    train_ds, test_ds = prepare_datasets(data_root)
 
-    Parameters
-    ----------
-    train_xy / val_xy: Tuple containing (x, y) tensors.
-    cfg              : Dict with hyper-parameters.
-    save_path        : If given, serialises the trained weights.
-    """
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    set_seed(cfg.get("seed", 0))
+    val_split = cfg.get("val_split", 0.1)
+    val_len = int(len(train_ds) * val_split)
+    train_len = len(train_ds) - val_len
+    train_ds, val_ds = random_split(train_ds, [train_len, val_len])
 
-    x_tr, y_tr = train_xy
-    x_va, y_va = val_xy
+    dl_train = DataLoader(train_ds, batch_size=cfg["batch_size"], shuffle=True)
+    dl_val = DataLoader(val_ds, batch_size=cfg["batch_size"], shuffle=False)
 
-    net = SimpleRegressor(int(cfg["hidden_dim"])).to(device)
+    # ------------------------------------------------------------------
+    # 2) Model, loss, optimiser
+    # ------------------------------------------------------------------
+    model = MLP().to(DEVICE)
+    criterion = nn.CrossEntropyLoss()
+    optimiser = torch.optim.Adam(model.parameters(), lr=cfg["lr"])
 
-    # Cast the learning-rate to float to guard against accidental string values
-    lr: float = float(cfg["lr"])
-    opt = torch.optim.Adam(net.parameters(), lr=lr)
-    loss_fn = nn.MSELoss()
-
-    dl = DataLoader(
-        TensorDataset(x_tr, y_tr), batch_size=int(cfg["batch_size"]), shuffle=True
-    )
-
-    history = {"train_loss": [], "val_loss": []}
-    t0 = time.time()
-    for epoch in range(int(cfg["epochs"])):
-        net.train()
-        for xb, yb in dl:
-            xb, yb = xb.to(device), yb.to(device)
-            opt.zero_grad()
-            pred = net(xb)
-            loss = loss_fn(pred, yb)
+    # ------------------------------------------------------------------
+    # 3) Training loop
+    # ------------------------------------------------------------------
+    train_losses, val_losses = [], []
+    epochs = cfg["epochs"]
+    for ep in range(1, epochs + 1):
+        model.train()
+        ep_loss = 0.0
+        for xb, yb in dl_train:
+            xb, yb = xb.to(DEVICE), yb.to(DEVICE)
+            optimiser.zero_grad(set_to_none=True)
+            preds = model(xb)
+            loss = criterion(preds, yb)
             loss.backward()
-            opt.step()
+            optimiser.step()
+            ep_loss += loss.item() * xb.size(0)
+        ep_loss /= train_len
+        train_losses.append(ep_loss)
 
-        # log
-        net.eval()
+        # ––– validation –––
+        model.eval()
         with torch.no_grad():
-            tr_loss = loss_fn(net(x_tr.to(device)), y_tr.to(device)).item()
-            va_loss = loss_fn(net(x_va.to(device)), y_va.to(device)).item()
-        history["train_loss"].append(tr_loss)
-        history["val_loss"].append(va_loss)
-        if (epoch + 1) % int(cfg["print_every"]) == 0 or epoch == 0:
-            print(
-                f"Epoch {epoch+1:03d}/{cfg['epochs']} – "
-                f"train MSE: {tr_loss:.4f} – val MSE: {va_loss:.4f}"
-            )
+            val_loss = 0.0
+            for xb, yb in dl_val:
+                xb, yb = xb.to(DEVICE), yb.to(DEVICE)
+                preds = model(xb)
+                val_loss += criterion(preds, yb).item() * xb.size(0)
+            val_loss /= val_len
+        val_losses.append(val_loss)
 
-    dur = time.time() - t0
-    print(f"Training finished in {dur:.1f} s. Best val MSE: {min(history['val_loss']):.4f}")
+        print(json.dumps({"epoch": ep, "train_loss": ep_loss, "val_loss": val_loss}))
 
-    if save_path is not None:
-        save_path.parent.mkdir(parents=True, exist_ok=True)
-        torch.save(net.state_dict(), save_path)
-        print(f"Model weights saved → {save_path}")
+    # save model
+    models_dir = Path("models"); models_dir.mkdir(exist_ok=True)
+    torch.save(model.state_dict(), models_dir / "mnist_mlp.pt")
 
-    return net, history
+    return model, train_losses, val_losses
