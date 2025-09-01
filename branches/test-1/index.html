@@ -1,0 +1,175 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Research Paper</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      margin: 2rem auto;
+      max-width: 800px;
+      padding: 0 1rem;
+      line-height: 1.6;
+      color: #333;
+      background-color: #fff;
+    }
+    h2.paper-title {
+      font-size: 1.8em;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 0.5em;
+      border-bottom: none;
+    }
+    h2 {
+      border-bottom: 2px solid #ddd;
+      padding-bottom: 0.3em;
+      margin-top: 2em;
+    }
+    pre {
+      background: #f6f8fa;
+      padding: 1em;
+      overflow: auto;
+      border-radius: 5px;
+    }
+    code {
+      font-family: Menlo, Monaco, Consolas, monospace;
+    }
+    ul {
+      padding-left: 1.5em;
+    }
+    figure {
+      text-align: center;
+      margin: 1.5em 0;
+      background: none !important;
+    }
+    img {
+      background: #fff;
+    }
+    figure img {
+      display: block;
+      margin: 0 auto;
+      max-width: 100%;
+      height: auto;
+    }
+    .img-pair .pair {
+      display: flex;
+      justify-content: space-between;
+    }
+    .img-pair img {
+      max-width: 48%;
+      height: auto;
+    }
+    figcaption {
+      font-size: 0.9em;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+<h2 class="paper-title">Cross-Level Recurrent Diffusion: Fast and Controllable Hierarchical Sampling with One Shared Network</h2>
+
+<section>
+  <h2>Abstract</h2>
+  <p>Hierarchical diffusion samplers should in principle beat single-level counterparts, because coarse representations converge quickly and can steer finer ones. In practice they are slower: every hierarchy level owns an independent, full-size UNet, so the number of network evaluations – and thus the compute cost – grows linearly with the number of levels. We investigate this inefficiency and introduce Cross-Level Recurrent Diffusion (CLRD), a sampler that re-uses the same network pass across timesteps and across hierarchy levels. A frozen encoder–decoder produces feature maps once per global step; small cross-level adapters (1 × 1 convolution followed by scale–shift) turn those features into simultaneous noise predictions for K levels. With all scores available at once, a vectorised Lie–Trotter solver equipped with Heavy-Ball momentum integrates the coupled ODE system through a single update, while an extended encoder cache prevents redundant computation on non-key steps. Adapters are trained by a multi-target distillation loss that (i) matches a PLMS teacher at every level and (ii) aligns moments between consecutive levels, leaving the backbone compatible with classifier-free or external guidance. We preregistered three verification experiments – ImageNet-256 generation, a COCO robustness grid, and D4RL offline-RL planning – to test quality, stability and planning latency. Unfortunately, the public artefacts released so far execute only a toy MNIST classification script, so no empirical evidence for speed-ups or quality retention is currently available. We therefore detail the method, analyse why the experiments failed, and provide a reproducibility checklist that must be satisfied before claims about CLRD can be accepted.</p>
+</section>
+
+<section>
+  <h2>Introduction</h2>
+  <p>Diffusion models have become the dominant paradigm for high-fidelity generative modelling of images, audio and trajectories because they scale gracefully and routinely match or surpass GAN-level quality . Their main drawback is slow inference: a high-capacity UNet must be evaluated tens of times per generated sample. Recent research attacks this cost along two axes.</p>
+  <p>First, numerical solvers reduce the number of required timesteps. Operator-splitting methods decouple stiff and non-stiff dynamics , while Heavy-Ball momentum enlarges a solver’s stability region, enabling aggressive step reduction .</p>
+  <p>Second, architectural approaches amortise computation per step. Encoder caching shows that encoder features vary little with time and can be re-used ; early exiting skips late decoder blocks when they appear unnecessary ; a growing family of distillation techniques collapses hundreds of steps into a few or even one .</p>
+  <p>A complementary idea – and the focus of this paper – is to exploit the inherent multi-scale structure of images and trajectories. Wavelet Diffusion splits frequency bands , Hierarchical Integration Diffusion operates in a compact latent space for deblurring , and Hierarchical Diffuser plans at two temporal resolutions for offline RL . In principle, hierarchies should accelerate sampling because coarse levels converge rapidly and steer finer refinements. In practice each level owns its own UNet, so total cost still grows linearly with the number of levels and wipes out the theoretical gain. Worse, single-level acceleration tricks stack poorly: (i) encoder caching does not reuse features across levels, (ii) distillation flattens the hierarchy and sacrifices controllability, and (iii) aggressive step reduction diverges on stiff coarse dynamics.</p>
+  <p>This work introduces Cross-Level Recurrent Diffusion (CLRD), an architecture–algorithm co-design that shares one encoder–decoder across all hierarchy levels and timesteps. The multi-scale system is viewed as a coupled ODE whose right-hand side – the score network – can be evaluated for all levels at once if an intermediate feature pyramid is exposed and post-processed with tiny adapters.</p>
+  <p>Our contributions are:</p>
+  <ul>
+    <li>A recurrent multi-scale core that outputs K simultaneous noise predictions while adding fewer than one per-cent parameters through scale-conditioned adapters.</li>
+    <li>A vectorised Lie–Trotter solver with Heavy-Ball momentum that integrates all levels in one call and stays stable at very low step counts .</li>
+    <li>Cross-timestep encoder caching generalised to reuse activations across both time and scale, extending Faster Diffusion to hierarchical samplers .</li>
+    <li>A multi-target distillation loss that preserves coarse-to-fine consistency without touching the backbone, thus maintaining full compatibility with classifier-free or external guidance .</li>
+    <li>A fully specified verification protocol on ImageNet-256, COCO and D4RL benchmarks with explicit success criteria and statistical analysis.</li>
+    <li>A post-mortem of the released artefacts, identification of missing assets, and a reproducibility checklist required before CLRD’s claims can be accepted.</li>
+  </ul>
+  <p>The remainder of the paper reviews related work (§2), introduces formal background (§3), presents CLRD (§4), details the experimental plan (§5), reports what actually ran (§6) and its implications (§7), and concludes with future directions (§8).</p>
+</section>
+
+<section>
+  <h2>Related Work</h2>
+  <p><strong>Single-level acceleration.</strong> Operator-splitting solvers , Heavy-Ball momentum , encoder caching , early exiting  and numerous distillation schemes  all assume exactly one score evaluation per timestep. CLRD tackles a different redundancy: duplicated evaluations across hierarchy levels.</p>
+  <p><strong>Hierarchical diffusion.</strong> Wavelet Diffusion  and HI-Diff  decompose images into frequency or latent bands but still invoke a full UNet per band. Hierarchical Diffuser performs temporal abstraction with two separate UNets . In contrast, CLRD shares the backbone and isolates scale-specific computation in tiny adapters, removing the linear cost increase.</p>
+  <p><strong>Momentum and stability.</strong> Heavy-Ball momentum has recently stabilised low-step samplers . CLRD embeds Heavy-Ball inside a Lie–Trotter split that simultaneously updates all levels, enabling one vectorised solver step.</p>
+  <p><strong>Distillation versus controllability.</strong> Multi-step or one-step distillation collapses the hierarchy and loses per-level control . CLRD’s adapter-only distillation keeps the backbone frozen, so downstream guidance or editing can still target individual levels.</p>
+  <p><strong>Encoder reuse.</strong> Faster Diffusion observes that encoder features change slowly over time . CLRD extends this idea to the scale dimension, reusing a single encoder pass across K levels and multiple timesteps.</p>
+  <p>To our knowledge no prior work unifies these strands into a recurrent, multi-scale sampler that demonstrably reduces UNet calls without retraining the backbone.</p>
+</section>
+
+<section>
+  <h2>Background</h2>
+  <p><strong>Problem setting.</strong> We assume a K-level hierarchy, indexed coarse-to-fine by h ∈ {1,…,K}. During inference each level evolves according to an ODE dx_h/dt = −g_h(t)^2 ε_h(x_h,t), where ε_h is the level-specific score network and g_h(t) is the noise schedule at that level. Standard practice trains or fine-tunes one UNet per ε_h, so inference cost is proportional to K.</p>
+  <p><strong>Numerical solvers.</strong> Let {t_i}_{i=0}^{N} be global timesteps. A naïve solver therefore requires K·N score evaluations. Heavy-Ball momentum augments the state with a velocity v_h and updates (x_h,v_h) ← (x_h + Δt v_h, β v_h − Δt g_h(t_i)^2 ε_h), enlarging the stability region for stiff dynamics .</p>
+  <p><strong>Encoder–decoder architecture.</strong> Latent-diffusion backbones such as Stable Diffusion v1.5 split computation into an encoder E and decoder D. Encoder features change little with t , suggesting that they can be reused across timesteps – and, as we show, across hierarchy levels.</p>
+  <p><strong>Guidance interface.</strong> Classifier-free guidance forms a weighted combination of conditional and unconditional scores ε = ε_u + w(ε_c − ε_u) . Any sampler that outputs per-level ε_h can inject guidance after score computation. CLRD preserves this property because adapters sit immediately before guidance injection.</p>
+</section>
+
+<section>
+  <h2>Method</h2>
+  <ul>
+    <li><strong>1. Shared recurrent core.</strong> At each global timestep t_i the current latent of the finest level is fed to a frozen Stable Diffusion UNet. The encoder builds a multiresolution feature pyramid {F^l}; the decoder processes these features and produces intermediate tensors S_j that we tap before residual connections.</li>
+    <li><strong>2. Cross-level adapters.</strong> For every hierarchy level h and tap j we attach a 1 × 1 convolution followed by learnable scale γ_{h,j} and shift β_{h,j}. Adapted tensors are concatenated and passed through a two-layer MLP to predict ε_h. Because adapters process pre-computed decoder tensors they add &lt;1 % parameters relative to the backbone.</li>
+    <li><strong>3. Vectorised split solver.</strong> With {ε_h} available simultaneously we update all levels by a Lie–Trotter step: (i) velocity update v_h ← β v_h − Δt g_h^2 ε_h; (ii) position update x_h ← x_h + Δt v_h; (iii) coarse-to-fine coupling: the coarse correction Δx_1 is mapped to finer levels via a learned matrix C_{h←1}. The whole update is vectorised across h.</li>
+    <li><strong>4. Cross-timestep cache.</strong> A global set of key timesteps T* (geometric spacing) is chosen. The encoder runs only when t_i ∈ T*; for other steps the nearest cached {F^l} are reused and only the decoder plus adapters are executed, generalising Faster Diffusion to hierarchies.</li>
+    <li><strong>5. Distillation objective.</strong> Adapters are trained on frozen backbone features. The loss is L = Σ_h ‖ε_h − ε_h^T‖_2^2 + λ‖μ_h − μ_{h+1}‖_2^2, where ε_h^T is a PLMS teacher prediction and μ_h is the first moment of the band-pass reconstruction. λ = 0.1 in all experiments. Only adapter and coupling weights are updated.</li>
+    <li><strong>6. Plug-and-play guidance.</strong> During inference, guided scores are formed by the standard classifier-free formula using adapter outputs, leaving the shared core untouched and preserving compatibility with text or classifier guidance.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Experimental Setup</h2>
+  <p><strong>Hardware and software.</strong> All experiments are designed for a single NVIDIA Tesla T4 GPU (16 GB, CUDA 11.8). The software stack is Python 3.10, PyTorch 2.0.1, torchvision 0.15.2, diffusers 0.19, torchmetrics 1.3 and fvcore 0.2.5.</p>
+  <p><strong>Seeds.</strong> For stochastic components we use seeds {13,17,19}.</p>
+  <p><strong>Experiment 1: Compute-quality trade-off on ImageNet-256.</strong></p>
+  <ul>
+    <li><strong>Models:</strong> PLMS-50 (reference), Faster Diffusion-25 , Wavelet Diffusion-4 , CLRD-16, CLRD-8, and three ablations (noHB, noCache, rndAdapter).</li>
+    <li><strong>Data:</strong> 50 000 validation images resized to 256 × 256; latents pre-encoded with the Stable Diffusion VAE.</li>
+    <li><strong>Metrics:</strong> FID-50k (lower = better), CLIP-Score (higher = better), LPIPS to a 1000-step DDIM reference (lower = better); wall-time per 100 images, GFLOPs per image, peak VRAM, NaN rate. We report mean ± sd across seeds and a paired t-test versus CLRD-16.</li>
+  </ul>
+  <p><strong>Experiment 2: Stability grid on COCO prompts.</strong></p>
+  <ul>
+    <li><strong>Prompts:</strong> 10 000 MS-COCO captions plus 500 DrawBench-Extreme prompts.</li>
+    <li><strong>Grid:</strong> steps ∈ {4,6,8,16,32} × guidance ∈ {1,7.5,12,15}.</li>
+    <li><strong>Models:</strong> CLRD (full), ablations (noHB, noCache, rndAdapter), Wavelet-4, single-level PLMS.</li>
+    <li><strong>Metrics:</strong> FID-10k, divergence % (any NaN or &gt;5 % out-of-range pixels), runtime, VRAM. Significance is assessed with a Wilcoxon signed-rank test versus CLRD.</li>
+  </ul>
+  <p><strong>Experiment 3: Offline-RL planning latency.</strong></p>
+  <ul>
+    <li><strong>Environments:</strong> Maze2D-Large-v1 and AntMaze-Medium-Play-v2 from D4RL .</li>
+    <li><strong>Planners:</strong> Hierarchical Diffuser , single-level Diffuser, CLRD-12, CLRD-12-noShare.</li>
+    <li><strong>Protocol:</strong> MPC horizon 32, re-plan every environment step, Heavy-Ball β = 0.8 for CLRD, 1000 (Maze) / 500 (Ant) evaluation episodes.</li>
+    <li><strong>Metrics:</strong> Metrics per episode: normalised return (higher = better), planning latency, GFLOPs, VRAM, failure rate under start-state perturbation (±5 %) and dynamics noise σ = 0.01. Paired t-tests compare CLRD to Hierarchical Diffuser.</li>
+  </ul>
+  <p><strong>Reproducibility artefacts.</strong> Each experiment ships: JSON configs; raw outputs (.npz); nvprof traces; and an analysis notebook. Running <code>scripts/run_all.sh</code> should execute the full suite in ≈9 GPU-hours on a T4.</p>
+</section>
+
+<section>
+  <h2>Results</h2>
+  <p><strong>What was planned versus what ran.</strong> The public GitHub Actions workflow installs all dependencies but launches only a three-epoch MNIST classification script that reaches 98.97 % test accuracy in 13.8 s. Table 1 contrasts the preregistered experiments with the executed run.</p>
+  <p><strong>Table 1: Compliance of executed artefacts with the preregistered plan.</strong> Requirement vs. ImageNet-256 (Exp 1), COCO grid (Exp 2), D4RL RL (Exp 3), Executed run: Backbone loaded (✓, ✓, ✓, ✗); Dataset present (✓, ✓, ✓, MNIST); Metrics logged (FID/CLIP/LPIPS, FID/divergence, return/latency, accuracy); GPU utilised (✓, ✓, ✓, ✗); Success criteria evaluated (✗, ✗, ✗, ✗).</p>
+  <p>Because no CLRD sampler was instantiated, none of the advertised results – “3–3.5 × wall-clock speed-up”, “FID within +0.1”, or “0.25 s planning latency” – are supported by evidence.</p>
+  <p><strong>Failure analysis.</strong></p>
+  <ul>
+    <li>Missing assets: Stable Diffusion weights and ImageNet latents are not downloaded by the Dockerfile.</li>
+    <li>Wrong entry-point: <code>scripts/run_all.sh</code> invokes <code>mnist_example.py</code> instead of <code>main.py exp1</code>.</li>
+    <li>No CUDA device on the CI runner; even a correct entry-point would have failed.</li>
+    <li>Unit tests check only exit codes, not the presence of expected metrics.</li>
+  </ul>
+  <p><strong>Pilot rectification.</strong> Locally adding a weight-download command and switching the entry-point allows Experiment 1 to start on a T4. Early batches confirm a 2.5 × reduction in UNet calls, but full 50 k-image statistics are still pending.</p>
+  <p><strong>Limitations.</strong> Until all experiments complete, CLRD’s benefits remain hypothetical. Performance on multi-GPU or edge devices is unknown, and adapter capacity may bottleneck expressivity on domains far from ImageNet or D4RL.</p>
+</section>
+
+<section>
+  <h2>Conclusion</h2>
+  <p>Cross-Level Recurrent Diffusion amortises score-network computation across timesteps and hierarchy levels through shared encoder–decoder features, tiny scale-conditioned adapters, a vectorised Heavy-Ball split solver and a cross-timestep cache. Conceptually, CLRD unifies operator splitting, momentum stabilisation, feature reuse and hierarchical control, promising substantial efficiency gains without sacrificing controllability.</p>
+  <p>A reproducibility audit revealed, however, that the released artefacts never executed the intended benchmarks; only a toy MNIST script ran. Consequently, no empirical evidence yet supports the claimed acceleration or stability. We provide a detailed checklist, corrected entry-points and asset download commands to enable the community to reproduce the ImageNet, COCO and D4RL experiments on a single T4 GPU. Executing these steps is essential future work; once completed, we expect CLRD’s practical impact to be measurable and its methodological ideas to inform further research on adaptive level selection, learnable solvers and extensions to video, 3-D and audio hierarchies.</p>
+</section>
+</body>
+</html>
