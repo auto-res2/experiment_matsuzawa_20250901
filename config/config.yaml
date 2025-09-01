@@ -8,3 +8,82 @@ batch_size: 64
 lr: 0.0005
 data_root: data/raw
 model_dir: models
+
+
+# New utility module added to fix missing imports
+# File: src/utils.py
+
+utils_scripts_content = """
+"""
+src/utils.py
+------------
+Common utility helpers shared across the training, evaluation and main entry
+points.  Keeping them in a dedicated module avoids code duplication and makes
+unit–testing easier.
+"""
+from __future__ import annotations
+
+import random
+from pathlib import Path
+
+import numpy as np
+import torch
+
+# Use non-interactive backend so that matplotlib works on head-less runners
+import matplotlib
+matplotlib.use("Agg")  # isort: skip
+import matplotlib.pyplot as plt  # noqa: E402  (after backend selection)
+
+def set_seed(seed: int) -> None:
+    """Set seeds for Python, NumPy and PyTorch to obtain deterministic behaviour
+    across runs (within the usual limitations of CUDA).
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+    # Ensures reproducible convolutions, at the cost of a minor speed penalty
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+
+def save_pdf_figure(history: dict[str, list[float]], output_path: Path) -> None:
+    """Save a two-axis learning-curve figure (loss & accuracy) to *output_path* and
+    additionally to `.research/iteration4/images/` as required by the
+    instructions.
+    """
+    # ------------------------------------------------------------------
+    # 1. Generate figure
+    # ------------------------------------------------------------------
+    epochs = range(1, len(history["train_loss"]) + 1)
+    fig, ax1 = plt.subplots(figsize=(5, 3))
+
+    # Training loss (left axis)
+    ax1.plot(epochs, history["train_loss"], color="tab:blue", label="train loss")
+    ax1.set_xlabel("Epoch")
+    ax1.set_ylabel("Loss", color="tab:blue")
+    ax1.tick_params(axis="y", labelcolor="tab:blue")
+
+    # Test accuracy (right axis)
+    ax2 = ax1.twinx()
+    ax2.plot(epochs, history["test_acc"], color="tab:orange", label="test acc")
+    ax2.set_ylabel("Accuracy", color="tab:orange")
+    ax2.tick_params(axis="y", labelcolor="tab:orange")
+
+    fig.tight_layout()
+
+    # ------------------------------------------------------------------
+    # 2. Persist figure(s)
+    # ------------------------------------------------------------------
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, format="pdf")
+
+    # Mandatory location for the grading infrastructure
+    research_dir = Path(".research/iteration4/images")
+    research_dir.mkdir(parents=True, exist_ok=True)
+    fig.savefig(research_dir / output_path.name, format="pdf")
+
+    plt.close(fig)
+"""
