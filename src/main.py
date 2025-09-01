@@ -6,7 +6,7 @@ steps so that users can simply execute
 from the project root.
 
 All plots are saved as vector-graphics PDF in
-    .research/iteration6/images/
+    .research/iteration7/images/
 per the project instructions.
 """
 from __future__ import annotations
@@ -27,7 +27,7 @@ from .evaluate import evaluate
 
 
 # -------------------------  Directories  ------------------------- #
-IMG_DIR = Path(".research/iteration6/images")
+IMG_DIR = Path(".research/iteration7/images")
 IMG_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -43,8 +43,16 @@ def run_experiment(cfg: Dict[str, Any]):
     policy, stats = train(cfg)
 
     # ------------------  EVALUATE  ------------------- #
-    mean_r, std_r = evaluate(policy, cfg["env_name"], cfg["eval_episodes"], cfg["max_steps"])
-    print(f"Evaluation over {cfg['eval_episodes']} episodes – mean reward = {mean_r:.2f} ± {std_r:.2f}\n")
+    mean_r, std_r = evaluate(
+        policy,
+        cfg["env_name"],
+        cfg["eval_episodes"],
+        cfg["max_steps"],
+        device=cfg["device"],  # ensure tensors are on the correct device
+    )
+    print(
+        f"Evaluation over {cfg['eval_episodes']} episodes – mean reward = {mean_r:.2f} ± {std_r:.2f}\n"
+    )
 
     # ------------------  PLOT CURVE  ------------------ #
     sns.set_theme(style="darkgrid")
