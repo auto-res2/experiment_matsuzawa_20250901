@@ -2,10 +2,13 @@
 evaluate.py – Evaluation & visualisation
 The script loads the trained model, evaluates on the held-out test set
 and produces a PDF figure suitable for academic publication.
-Figures are stored under ./.research/iteration15/images
+Figures are stored under ./.research/iteration16/images (as per updated
+specification).
 """
 from __future__ import annotations
 
+import os
+import random
 from pathlib import Path
 from typing import Dict, Tuple
 
@@ -13,14 +16,35 @@ import matplotlib
 
 matplotlib.use("Agg")  # head-less backend
 import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
 import seaborn as sns  # noqa: E402
 import torch  # noqa: E402
 from torch import Tensor  # noqa: E402
 
-from .utils import set_seed
+# -----------------------------------------------------------------------------
+# Re-usable utility – falls back to local definition if src.utils is unavailable
+# -----------------------------------------------------------------------------
+try:
+    from .utils import set_seed  # type: ignore
+except ModuleNotFoundError:  # pragma: no cover – local fallback for robustness
+
+    def set_seed(seed: int | None = None) -> None:  # noqa: D401
+        """Set random seeds for reproducibility (torch / numpy / python)."""
+        if seed is None:
+            return
+        os.environ["PYTHONHASHSEED"] = str(seed)
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+
 from .train import SimpleRegressor
 
-IMG_DIR = Path(".research/iteration15/images")
+# Directory mandated by the updated instructions
+IMG_DIR = Path(".research/iteration16/images")
 IMG_DIR.mkdir(parents=True, exist_ok=True)
 
 

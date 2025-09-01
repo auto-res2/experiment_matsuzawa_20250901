@@ -5,13 +5,33 @@ The function returns PyTorch tensors already split into train/val/test.
 """
 from __future__ import annotations
 
+import os
+import random
 from typing import Dict, Tuple
 
 import numpy as np
 import torch
 from torch import Tensor
 
-from .utils import set_seed
+# -----------------------------------------------------------------------------
+# Re-usable utility – falls back to local definition if src.utils is unavailable
+# -----------------------------------------------------------------------------
+try:
+    from .utils import set_seed  # type: ignore
+except ModuleNotFoundError:  # pragma: no cover – local fallback for robustness
+
+    def set_seed(seed: int | None = None) -> None:  # noqa: D401
+        """Set random seeds for reproducibility (torch / numpy / python)."""
+        if seed is None:
+            return
+        os.environ["PYTHONHASHSEED"] = str(seed)
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
 
 
 def make_dataset(cfg: Dict) -> Tuple[Tuple[Tensor, Tensor], Tuple[Tensor, Tensor], Tuple[Tensor, Tensor]]:

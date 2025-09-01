@@ -7,16 +7,37 @@ preprocess.py.  Training artefacts are stored under ./models.
 """
 from __future__ import annotations
 
+import os
+import random
 import time
 from pathlib import Path
 from typing import Dict, Tuple
 
+import numpy as np
 import torch
 from torch import Tensor, nn
 from torch.utils.data import DataLoader, TensorDataset
 
-# relative import (module lives in the same package – src)
-from .utils import set_seed
+# -----------------------------------------------------------------------------
+# Re-usable utility – falls back to local definition if src.utils is unavailable
+# -----------------------------------------------------------------------------
+try:
+    from .utils import set_seed  # type: ignore
+except ModuleNotFoundError:  # pragma: no cover – local fallback for robustness
+
+    def set_seed(seed: int | None = None) -> None:  # noqa: D401 (plain docstring)
+        """Set random seeds for reproducibility (torch / numpy / python)."""
+        if seed is None:
+            return
+        os.environ["PYTHONHASHSEED"] = str(seed)
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+
 
 # -----------------------------------------------------------------------------
 # Model definition

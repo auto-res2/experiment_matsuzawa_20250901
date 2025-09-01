@@ -11,12 +11,12 @@ from typing import Any, Dict
 
 import yaml
 
+from . import evaluate as ev
 from . import preprocess as pp
 from . import train as tr
-from . import evaluate as ev
 
 CFG_DIR = Path("config")
-DEFAULT_CFG = CFG_DIR / "default.yaml"
+DEFAULT_CFG = CFG_DIR / "config.yaml"  # adjusted to match the provided file name
 
 
 def load_cfg(path: Path | str | None) -> Dict[str, Any]:
