@@ -1,7 +1,6 @@
+torch>=2.0
 numpy
-pandas
-torch
 matplotlib
 seaborn
 gymnasium
-d4rl
+PyYAML

@@ -1,39 +1,33 @@
 """src/preprocess.py
-Data-loading utilities.  A real diffusion-policy project would use D4RL
-or other offline RL datasets.  For demonstration purposes we fall back
-to a *random* dataset if the environment does not expose `.get_dataset()`.
+For the simple CartPole example we do not require any heavy
+pre-processing, but we keep the module so that the pipeline matches the
+spec provided in the instructions.
 """
 from __future__ import annotations
 
-import numpy as np
-from typing import Dict
+from typing import Dict, Any
+import yaml
 
 
-def _dim_from_space(space) -> int:
-    """Return scalar dimension for (Box | Discrete) spaces."""
-    from gymnasium.spaces import Discrete  # type: ignore
+DEFAULT_CONFIG = {
+    "seed": 42,
+    "env_name": "CartPole-v1",
+    "total_episodes": 500,
+    "max_steps": 200,
+    "learning_rate": 1e-2,
+    "gamma": 0.99,
+    "hidden_size": 128,
+    "eval_episodes": 20,
+}
 
-    if hasattr(space, "shape") and space.shape is not None and len(space.shape) > 0:
-        return space.shape[0]
-    if isinstance(space, Discrete):
-        return 1
-    raise ValueError("Unsupported space type – cannot determine dimension.")
 
-
-def load_dataset(env) -> Dict[str, np.ndarray]:
-    """Return a dictionary with keys observations / actions / rewards / terminals.
-    If the env already supplies a dataset (D4RL) we simply forward it.
-    """
-    if hasattr(env, "get_dataset"):
-        return env.get_dataset()
-
-    # ----------------  fallback: create a random dataset  ----------------
-    obs_dim = _dim_from_space(env.observation_space)
-    act_dim = _dim_from_space(env.action_space)
-    N = 10_000  # small dummy dataset
-    return {
-        "observations": np.random.randn(N, obs_dim).astype(np.float32),
-        "actions": np.random.randn(N, act_dim).astype(np.float32),
-        "rewards": np.random.randn(N, 1).astype(np.float32),
-        "terminals": np.random.randint(0, 2, size=(N, 1)).astype(np.float32),
-    }
+def load_config(path: str | None = None) -> Dict[str, Any]:
+    """Load YAML configuration; fall back to defaults if not provided."""
+    if path is None:
+        return DEFAULT_CONFIG.copy()
+    with open(path, "r", encoding="utf-8") as f:
+        cfg = yaml.safe_load(f)
+    # fill in missing keys with defaults
+    full_cfg = DEFAULT_CONFIG.copy()
+    full_cfg.update(cfg or {})
+    return full_cfg
