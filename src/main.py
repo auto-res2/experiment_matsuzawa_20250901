@@ -5,7 +5,7 @@ slightly refactored version of the original `run_experiments.py` so that
 it leverages the helpers living in *src.train*, *src.evaluate* and
 *src.preprocess* with only **relative imports** as required.
 
-All images are written to `.research/iteration1/images` as PDF – compliant
+All images are written to `.research/iteration2/images` as PDF – compliant
 with the given directory specification.
 """
 from __future__ import annotations
@@ -48,13 +48,12 @@ DEFAULT_CFG = {
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Directory for plots --------------------------------------------------------
-IMG_DIR = Path(".research/iteration1/images")
+IMG_DIR = Path(".research/iteration2/images")
 IMG_DIR.mkdir(parents=True, exist_ok=True)
 
 # ---------------------------------------------------------------------------
 # Utility helpers ------------------------------------------------------------
 # ---------------------------------------------------------------------------
-
 
 def _print_header(title: str, description: str) -> None:
     bar = "=" * 80
@@ -73,19 +72,36 @@ def run_experiment1() -> pd.DataFrame:
     )
     _print_header("Experiment 1", desc)
 
+    # ------------------------------------------------------------------
+    # Try importing D4RL – this will fail on systems without MuJoCo.  We
+    # fall back to a simple CartPole benchmark in that case so that CI
+    # and users without MuJoCo can still run the full script without any
+    # additional setup.
+    # ------------------------------------------------------------------
     try:
         import gymnasium as gym  # type: ignore
-        import d4rl  # noqa: F401
-    except ImportError:
-        print("[warning] gymnasium / d4rl not found – falling back to CartPole‐v1")
-        import gymnasium as gym  # type: ignore
-        global TASKS
-        TASKS = ["CartPole-v1"]
+        import d4rl  # noqa: F401 – side-effect registration of tasks
+        tasks_local = TASKS
+    except Exception as exc:  # noqa: BLE001 – we really want *any* failure
+        print(
+            f"[warning] gymnasium / d4rl not usable ({exc}) – "
+            "falling back to CartPole-v1"
+        )
+        import gymnasium as gym  # type: ignore  # always available
+        tasks_local = ["CartPole-v1"]
 
     rows: List[Dict[str, Any]] = []
 
-    for task in TASKS:
-        env = gym.make(task)
+    for task in tasks_local:
+        # A handful of environments provided by D4RL still require MuJoCo
+        # even after import succeeded.  We guard against runtime failures
+        # here and skip tasks that cannot be instantiated.
+        try:
+            env = gym.make(task)
+        except Exception as exc:  # noqa: BLE001 – broad for robustness
+            print(f"[warning] Skipping task '{task}' ({exc})")
+            continue
+
         buffer = load_dataset(env)
 
         for model_name, AgentCls in AGENT_REGISTRY.items():
@@ -119,16 +135,30 @@ def run_experiment1() -> pd.DataFrame:
 
     df = pd.DataFrame(rows)
 
+    if df.empty:
+        print("[error] No tasks could be run – exiting Experiment 1 early.")
+        return df
+
     # Aggregate over seeds ----------------------------------------------------
-    agg = df.groupby(["model", "task"])[["success", "latency_ms", "energy_kJ"]].mean().reset_index()
+    agg = (
+        df.groupby(["model", "task"])[["success", "latency_ms", "energy_kJ"]]
+        .mean()
+        .reset_index()
+    )
 
     # ---------------- plots --------------------------------------------------
     def _annotate(ax):
         for container in ax.containers:
             for bar in container:
                 h = bar.get_height()
-                ax.text(bar.get_x() + bar.get_width() / 2, h, f"{h:.2f}",
-                        ha="center", va="bottom", fontsize=7)
+                ax.text(
+                    bar.get_x() + bar.get_width() / 2,
+                    h,
+                    f"{h:.2f}",
+                    ha="center",
+                    va="bottom",
+                    fontsize=7,
+                )
 
     # 1) success --------------------------------------------------------------
     plt.figure(figsize=(10, 4))
@@ -158,7 +188,7 @@ def run_experiment1() -> pd.DataFrame:
 # Dummy Experiments 2 & 3 (timing + robustness) ------------------------------
 # ---------------------------------------------------------------------------
 
-def run_placeholder_experiment(exp_id: int) -> pd.DataFrame:
+def run_placeholder_experiment(exp_id: int) -> pd.DataFrame:  # noqa: D401 – simple name
     """Generate synthetic numbers for additional plots so that the paper-style
     figures exist even without the real compute-heavy workloads."""
     rng = np.random.RandomState(exp_id)
@@ -211,7 +241,10 @@ def main():
     df3 = run_placeholder_experiment(3)
 
     print("\n===== Summary =====")
-    print(df1.groupby("model")[["success", "latency_ms"]].mean().round(3))
+    if not df1.empty:
+        print(df1.groupby("model")[["success", "latency_ms"]].mean().round(3))
+    else:
+        print("No Experiment 1 results available.")
     print("Runtime:", round(time.time() - start, 1), "sec")
 
 
