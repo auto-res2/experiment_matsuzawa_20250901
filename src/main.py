@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import List
+from typing import List, Any
 
 import typer
 from rich.console import Console
@@ -20,9 +20,9 @@ from .evaluate import evaluate_model
 
 # --------------------------------------------------------------------
 #  Ensure that every image created by matplotlib is written to the
-#  project-wide output directory `.research/iteration9/images`.
+#  project-wide output directory `.research/iteration10/images`.
 # --------------------------------------------------------------------
-_IMG_DIR = Path(".research/iteration9/images")
+_IMG_DIR = Path(".research/iteration10/images")
 _IMG_DIR.mkdir(parents=True, exist_ok=True)
 
 try:
@@ -78,6 +78,24 @@ if "app" in globals() and isinstance(globals()["app"], typer.Typer):
     app.add_typer(globals()["app"], name="clrd")  # e.g. `python -m src.main clrd exp1 ...`
 
 
+# --------------------------------------------------------------------
+#  Internal helper: unwrap Typer's `OptionInfo` objects when the command
+#  is invoked programmatically (i.e. without CLI parsing).
+# --------------------------------------------------------------------
+
+def _unwrap_option(value: Any) -> Any:  # noqa: D401 – simple helper
+    """Return the option's default if *value* is a Typer `OptionInfo`."""
+    try:
+        from typer.models import OptionInfo  # type: ignore
+
+        if isinstance(value, OptionInfo):
+            return value.default
+    except ModuleNotFoundError:
+        # Typer not available? Should never happen because we import it above.
+        pass
+    return value
+
+
 @app.command()
 def pipeline(
     epochs: int = typer.Option(3, help="Number of training epochs"),
@@ -85,6 +103,14 @@ def pipeline(
     lr: float = typer.Option(1e-3, help="Learning rate"),
 ):
     """End-to-end MNIST example (preprocess → train → evaluate)."""
+
+    # When called **programmatically** (e.g. via `python -m src.main` without
+    # arguments) the parameters are Typer `OptionInfo` objects – convert them
+    # to their underlying default values so that downstream code receives the
+    # expected native Python types.
+    epochs = int(_unwrap_option(epochs))
+    batch_size = int(_unwrap_option(batch_size))
+    lr = float(_unwrap_option(lr))
 
     console = Console()
 
@@ -107,6 +133,6 @@ def pipeline(
 if __name__ == "__main__":
     if len(sys.argv) == 1:
         # no sub-commands supplied – run the default MNIST demo
-        pipeline()
+        pipeline()  # type: ignore[misc] – parameters handled internally
     else:
         app()
