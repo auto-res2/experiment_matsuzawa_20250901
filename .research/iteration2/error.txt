@@ -1,0 +1,32 @@
+Warning: Gym version v0.24.1 has a number of critical issues with `gym.make` such that the `reset` and `step` functions are called before returning the environment. It is recommend to downgrading to v0.23.1 or upgrading to v0.25.1
+Additionally, Gym has been unmaintained since 2022 and does not support NumPy 2.0 amongst other critical functionality.
+Please upgrade to Gymnasium, the maintained drop-in replacement of Gym, or contact the authors of your software and request that they upgrade.
+See the migration guide at https://gymnasium.farama.org/introduction/migration_guide/ for additional information.
+
+You appear to be missing MuJoCo.  We expected to find the file here: /home/runner/.mujoco/mujoco210
+
+This package only provides python bindings, the library must be installed separately.
+
+Please follow the instructions on the README to install MuJoCo
+
+    https://github.com/openai/mujoco-py#install-mujoco
+
+Which can be downloaded from the website
+
+    https://www.roboti.us/index.html
+
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/runner/work/experiment_matsuzawa_20250901/experiment_matsuzawa_20250901/src/main.py", line 252, in <module>
+    main()
+  File "/home/runner/work/experiment_matsuzawa_20250901/experiment_matsuzawa_20250901/src/main.py", line 239, in main
+    df1 = run_experiment1()
+          ^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/experiment_matsuzawa_20250901/experiment_matsuzawa_20250901/src/main.py", line 105, in run_experiment1
+    buffer = load_dataset(env)
+             ^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/experiment_matsuzawa_20250901/experiment_matsuzawa_20250901/src/preprocess.py", line 21, in load_dataset
+    act_dim = env.action_space.shape[0]
+              ~~~~~~~~~~~~~~~~~~~~~~^^^
+IndexError: tuple index out of range
