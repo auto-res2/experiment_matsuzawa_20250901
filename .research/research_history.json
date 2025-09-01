@@ -657,6 +657,68 @@
       }
     }
   ],
+  "reference_research_study_list": [
+    {
+      "title": "D4RL: Datasets for deep data-driven reinforcement learning"
+    },
+    {
+      "title": "Off-policy deep reinforcement learning without exploration"
+    },
+    {
+      "title": "Simplifying model-based RL: Learning representations, latent-space models, and policies with one objective"
+    },
+    {
+      "title": "World models"
+    },
+    {
+      "title": "Learning latent dynamics for planning from pixels"
+    },
+    {
+      "title": "Dream to control: Learning behaviors by latent imagination"
+    },
+    {
+      "title": "Deep hierarchical planning from pixels"
+    },
+    {
+      "title": "On the role of planning in model-based deep reinforcement learning"
+    },
+    {
+      "title": "Classifier-free diffusion guidance"
+    },
+    {
+      "title": "Denoising diffusion probabilistic models"
+    },
+    {
+      "title": "Planning goals for exploration"
+    },
+    {
+      "title": "Offline reinforcement learning as one big sequence modeling problem"
+    },
+    {
+      "title": "Planning with diffusion for flexible behavior synthesis"
+    },
+    {
+      "title": "Robustness implies generalization via data-dependent generalization bounds"
+    },
+    {
+      "title": "Morel: Model-based offline reinforcement learning"
+    },
+    {
+      "title": "Variational temporal abstraction"
+    },
+    {
+      "title": "Learning abstraction hierarchies for problem solving"
+    },
+    {
+      "title": "Offline reinforcement learning with implicit Q-learning"
+    },
+    {
+      "title": "Stabilizing off-policy q-learning via bootstrapping error reduction"
+    },
+    {
+      "title": "Conservative Q-learning for offline reinforcement learning"
+    }
+  ],
   "new_method": {
     "method": "Open Problems: Hierarchical diffusion models (multi-scale latents, high-/low-level planners, or wavelet decompositions) promise large acceleration, yet in practice they are still compute-hungry. The major bottleneck is that every hierarchy level is rolled out with its own full-fidelity solver or UNet, so the total number of network evaluations grows linearly with the number of levels. Existing acceleration techniques (operator–splitting, feature caching, multi-stage decoders, heavy-ball momentum, early-exit, distillation) were each designed for a *single-level* sampler and cannot be naively stacked: (1) feature reuse across timesteps ignores cross-level reuse, (2) distillation collapses all levels into one but loses hierarchical controllability, and (3) aggressive step-reduction often diverges on the coarse levels where dynamics are stiff. A unified framework that lets the *same* network evaluations serve several hierarchy levels while keeping stability and controllability is still missing.\nMethods: We propose Cross-Level Recurrent Diffusion (CLRD).\n1. Recurrent core: replace the separate UNet at every hierarchy with one *shared* encoder-decoder that is called once per global timestep and produces intermediate feature maps. Lightweight cross-level adapters (1×1 Conv + scale/shift) transform the shared features into level-specific predictions. Adapters have <1 % of the base parameters and are conditioned on both timestep *t* and hierarchy index *h* so that one forward pass produces K noise predictions {\\epsilon_h} for K levels.\n2. Split-solver with momentum: Guided ODE of each level is integrated with a Lie-Trotter/Heavy-Ball step. Because all {\\epsilon_h} are available simultaneously we can solve the coupled ODE system with a *vectorised* update—one HB velocity per level but one function call.\n3. Feature cache across timesteps: Extend encoder-propagation (Faster Diffusion) so that key-timesteps are chosen *globally*; cached encoder features are reused by all levels; adapters operate on the cached tensors, eliminating encoder recomputation for non-key steps.\n4. Cross-level distillation: train the adapters with a multi-target consistency loss: (a) coarse-to-fine PLMS teacher, (b) moment-matching between consecutive levels to keep sub-band consistency. Only adapters and a tiny recurrent HB velocity predictor are trained; the shared core is frozen.\n5. Plug-and-play: the framework is orthogonal to text or classifier guidance – guidance gradient is injected after adapter outputs, identical to standard classifier-free guidance.\nExperimental Setup: Image Generation: Train on ImageNet-256 with the public Stable-Diffusion-v1.5 encoder as the shared core (latent 64×64×4). Define 3 hierarchy levels: latent-space 64×64, pixel space 256×256 LL band, and full pixel. Baselines: (i) original SD sampler (PLMS50), (ii) Faster Diffusion encoder-propagation, (iii) Wavelet Diffusion (4-step), (iv) Heavy-Ball PLMS. Metrics: FID (50k), CLIP-score, LPIPS vs 1000-step reference, wall-clock time & GFLOPs per image on A100.\nOffline RL planning: Use Hierarchical Diffuser codebase on Maze2D-Large. Replace two separate diffusers with CLRD (shared Temporal UNet encoder, two adapters). Compare return and planning latency against original Hierarchical Diffuser (50+50 steps) and single-level Diffuser (50 steps).\nAblations: (1) no momentum, (2) no encoder cache, (3) per-level UNet. Robustness: evaluate extreme guidance scales (1–15) and very low sampling steps (4,8,16).\nResult: We expect\n• 2.5× reduction in total UNet forward passes vs Faster Diffusion and ≈4× vs vanilla PLMS at equal image quality (FID within +0.1 on ImageNet-256, CLIP-score unchanged).\n• Overall 3–3.5× wall-clock speed-up and 45 % GFLOP saving per image.\n• CLRD maintains stability at 8 steps where single-level HB or Wavelet models diverge (no blown-out pixels, LPIPS ≤0.06 to 1000-step reference).\n• In Maze2D planning, CLRD achieves the same return as Hierarchical Diffuser (≈0.83) while cutting planning time from 0.9 s to 0.25 s per episode.\n• Ablations show each component is necessary: removing cache gives 1.6× slower; removing momentum increases FID by 0.5 at 8 steps.\nConclusion: Cross-Level Recurrent Diffusion demonstrates that hierarchical diffusion can be both *fast* and *controllable* by reusing a single network pass across levels and timesteps. The method unifies encoder caching, operator-splitting, and momentum under one recurrent formulation, yielding substantial speed-ups without retraining large backbones. Practically, this enables near-real-time high-resolution generation and sub-second long-horizon planning on a single GPU. Academically, it offers a new viewpoint of hierarchical sampling as a coupled ODE system amenable to vectorised solvers, opening avenues for further reductions via neural ODE learning, adaptive level selection, and application to 3-D, audio, or video hierarchies.",
     "experimental_design": {
