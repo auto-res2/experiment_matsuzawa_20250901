@@ -80,7 +80,12 @@ class HydraSketchBuffer:
 
     @torch.no_grad()
     def _to_bits(self, z: torch.Tensor) -> torch.Tensor:
-        """Project latent vectors to sign sketches (binary codes)."""
+        """Project latent vectors to sign sketches (binary codes).
+
+        Autocast can produce fp16/bf16 latents while `self.R` is fp32. Cast the
+        latent to the projection matrix's dtype to avoid dtype mismatch errors.
+        """
+        z = z.to(dtype=self.R.dtype)
         proj = torch.sign(z @ self.R)  # (batch, b)
         bits = (proj < 0).to(torch.uint8)
         return bits
