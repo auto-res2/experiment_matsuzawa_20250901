@@ -1,17 +1,4 @@
-# config/experiment.yaml
-# ----------------------
-# Example override file that can be passed via
-#    python -m src.main --config config/experiment.yaml
-seed: 17
-epochs: 5
-batch_size: 64
-lr: 0.0005
-data_root: data/raw
-model_dir: models
-
-
-# New utility module added to fix missing imports
-# File: src/utils.py
-
-utils_scripts_content = """
-"""
+training:
+  epochs: 3
+  batch_size: 64
+  lr: 0.001
