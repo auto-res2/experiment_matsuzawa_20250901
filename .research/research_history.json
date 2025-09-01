@@ -619,6 +619,68 @@
       }
     }
   ],
+  "reference_research_study_list": [
+    {
+      "title": "The geometry of discrete groups, volume 91."
+    },
+    {
+      "title": "Towards a theoretical foundation for Laplacian-based manifold methods."
+    },
+    {
+      "title": "A Gromov-Hausdorff framework with diffusion geometry for topologically-robust non-rigid shape matching."
+    },
+    {
+      "title": "Hyperbolic deep reinforcement learning."
+    },
+    {
+      "title": "Neural embeddings of graphs in hyperbolic space."
+    },
+    {
+      "title": "Hyperbolic graph convolutional neural networks."
+    },
+    {
+      "title": "From trees to continuous embeddings and back: Hyperbolic hierarchical clustering."
+    },
+    {
+      "title": "On the diffusion geometry of graph Laplacians and applications."
+    },
+    {
+      "title": "Some extensions of E. Stein’s work on Littlewood–Paley theory applied to symmetric diffusion semigroups."
+    },
+    {
+      "title": "Diffusion maps."
+    },
+    {
+      "title": "Diffusion wavelets."
+    },
+    {
+      "title": "Multidimensional scaling."
+    },
+    {
+      "title": "A cost function for similarity-based hierarchical clustering."
+    },
+    {
+      "title": "Exploratory social network analysis with Pajek: Revised and expanded edition for updated software"
+    },
+    {
+      "title": "Deep generative model embedding of single-cell RNA-Seq profiles on hyperspheres and hyperbolic spaces."
+    },
+    {
+      "title": "Impact of signal-to-noise ratio and bandwidth on graph Laplacian spectrum from high-dimensional noisy point cloud."
+    },
+    {
+      "title": "UCI machine learning repository, 2017."
+    },
+    {
+      "title": "Optimal marker gene selection for cell type discrimination in single cell analyses."
+    },
+    {
+      "title": "CellTree: an R/bioconductor package to infer the hierarchical structure of cell populations from single-cell RNA-Seq data."
+    },
+    {
+      "title": "Kernel methods in hyperbolic spaces."
+    }
+  ],
   "new_method": {
     "method": "Open Problems: Current hierarchical diffusion planners (e.g., Hierarchical Diffuser) achieve long-horizon generalisation but remain 1–2 orders of magnitude slower than non-hierarchical RL baselines.  Training two separate diffusers (high-/low-level) and repeatedly running the low-level model for every sub-segment dominates wall-clock time.  None of the existing acceleration techniques (encoder-propagation, momentum solvers, wavelet factorisation, RTK, etc.) have been adapted to the hierarchical-planning setting because (1) sub-goals break temporal regularity assumed by fast ODE solvers, (2) low-level roll-outs waste computation on states that are later discarded when the high-level sample is rejected, and (3) memory reuse schemes ignore the conditioning on changing sub-goals.  A solution that jointly accelerates both hierarchy levels without sacrificing plan quality or generalisation is missing.\nMethods: We propose AMORTISED-CACHE HIERARCHICAL DIFFUSION (ACHyD).  Key ideas:\n1. Unified Wavelet-Latent Representation –  encode the full trajectory once into a multi-resolution wavelet latent.  The high-level “coarse” channel is fed to a sparse diffuser; the fine channels are cached and re-combined only for the few sub-segments finally accepted, avoiding repeated low-level encoding.\n2. Encoder-Propagation Across Segments –  extend Faster-Diffusion’s non-uniform encoder caching to the planning regime: store encoder features at each jumpy sub-goal boundary; neighbouring segments reuse them, skipping ∼70 % of convolutions.\n3. Hybrid Solver with Momentum –  within each diffuser call, replace DDPM sampling by Generalised-Heavy-Ball DPM-Solver (GHVB) with β tuned for stability under large sub-goal jumps; provides 4–8 step sampling without divergence.\n4. Partial Rejection-Free Low-Level Sampling –  replace full low-level DDPM roll-outs by an RTK-MALA outer kernel that directly proposes the whole segment conditioned on sub-goal endpoints, accepting with a cheap value-function check; this cuts the number of low-level samples per high-level trial from M to 1.\n5. Training-time Knowledge Distillation –  distil the two-level model into a single Conditional Moment-Matching network that predicts both sub-goals and intra-segment actions, used only at inference when resources are constrained.\nExperimental Setup: Benchmarks: Maze2D-Large, AntMaze-Large (D4RL), and FrankaKitchen-Mixed.\nBaselines: Original Hierarchical Diffuser (HD), HD-DA, Diffuser (flat), RTK-MALA, Faster-Diffusion, encoder-propagation (applied naively).\nMetrics: (a) planning success rate; (b) wall-clock time and GPU-hours for training; (c) inference latency per episode; (d) energy consumption; (e) OOD compositional generalisation success.\nAblations: remove each module (wavelet latent, encoder cache, GHVB, rejection-free sampling, distillation) and vary β and encoder-key schedules.\nRobustness: evaluate under 50 % reduced GPU memory and under stochastic environment perturbations (wind, actuator noise).\nResult: We expect ACHyD to match or exceed HD’s success rate (±1 %) while\n• reducing training time by ≈2× through wavelet latent reuse,\n• cutting inference latency by 5–8× (Maze2D) and 3–4× (AntMaze),\n• consuming ≤40 % of the energy of HD,\n• maintaining >90 % success on OOD tasks, vs. 82 % for naive accelerations.\nAblations should show each component contributing cumulatively (e.g., cache +2×, GHVB +1.5×, RTK-segment +1.8× speed-up).\nConclusion: ACHyD demonstrates that ideas from fast diffusion sampling, wavelet compression, and MCMC kernels can be synergistically combined to yield the first practically fast hierarchical diffusion planner.  Academically, it bridges acceleration research with hierarchical control; practically, it enables real-time planning on a single GPU for tasks previously requiring clusters.  Future work can port the amortised cache to vision-conditioned diffusers and extend RTK segment proposals to stochastic environments, pushing diffusion-based planning toward robotics deployment.",
     "experimental_design": {
