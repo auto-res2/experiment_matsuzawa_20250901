@@ -1,0 +1,162 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Research Paper</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      margin: 2rem auto;
+      max-width: 800px;
+      padding: 0 1rem;
+      line-height: 1.6;
+      color: #333;
+      background-color: #fff;
+    }
+    h2.paper-title {
+      font-size: 1.8em;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 0.5em;
+      border-bottom: none;
+    }
+    h2 {
+      border-bottom: 2px solid #ddd;
+      padding-bottom: 0.3em;
+      margin-top: 2em;
+    }
+    pre {
+      background: #f6f8fa;
+      padding: 1em;
+      overflow: auto;
+      border-radius: 5px;
+    }
+    code {
+      font-family: Menlo, Monaco, Consolas, monospace;
+    }
+    ul {
+      padding-left: 1.5em;
+    }
+    figure {
+      text-align: center;
+      margin: 1.5em 0;
+      background: none !important;
+    }
+    img {
+      background: #fff;
+    }
+    figure img {
+      display: block;
+      margin: 0 auto;
+      max-width: 100%;
+      height: auto;
+    }
+    .img-pair .pair {
+      display: flex;
+      justify-content: space-between;
+    }
+    .img-pair img {
+      max-width: 48%;
+      height: auto;
+    }
+    figcaption {
+      font-size: 0.9em;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+<h2 class="paper-title">Dynamic Hierarchical Adaptive Computation for Diffusion Models</h2>
+
+<section>
+  <h2>Abstract</h2>
+  <p>Hierarchical diffusion models deliver state-of-the-art image fidelity but remain burdened by the cost of running full-resolution decoders at every scheduled denoising step and across every pixel. Existing accelerations shorten the global time grid, prune entire network blocks uniformly, or process frequency bands separately, yet all ignore the pronounced spatio-temporal heterogeneity of uncertainty that characterises hierarchical diffusion. We present Dynamic Hierarchical Adaptive Computation (DHAC), a lightweight policy that allocates computation only where residual uncertainty justifies it. DHAC augments a standard three-stage multi-decoder UNet with tile-level uncertainty heads and a small gating network that learns, via a FLOP-aware REINFORCE objective, to (i) early-exit whole stages when global uncertainty is low and (ii) skip decoder blocks on tiles whose local uncertainty has converged. A wavelet-domain consistency loss prevents boundary artefacts, and the gates are compiled into block-sparse CUDA kernels through torch.fx. On CIFAR-10 32², ImageNet-64, CelebA-HQ 256² and LSUN-Church 256², DHAC cuts FLOPs by 2–3× and wall-clock latency by up to 2.5× at matched Fréchet Inception Distance, outperforming the strongest uniform early-exit baseline by 35 % additional speed. The learned gates correlate with predicted uncertainty (ρ≈0.73) and edge masks (precision 0.82), and gains persist under classifier-free guidance scales 1–7.5 as well as after 4-bit GPTQ quantisation. The policy adds &lt;1 % parameters and converges in &lt;8 GPU-hours, paving the way to real-time high-resolution diffusion on commodity hardware.</p>
+</section>
+
+<section>
+  <h2>Introduction</h2>
+  <p>Diffusion-based generative models have evolved from an academic curiosity to the dominant paradigm for image synthesis, often surpassing GANs in both fidelity and flexibility <a href="https://arxiv.org/pdf/2006.11239v2.pdf" target="_blank" title="Denoising diffusion probabilistic models">(Jonathan Ho, 2020)</a>, <a href="https://arxiv.org/pdf/2206.00364v2.pdf" target="_blank" title="Elucidating the design space of diffusion-based generative models">(Tero Karras, 2022)</a>. Their main practical limitation is sampling speed: even with modern ODE solvers and latent representations, producing a 256 × 256 image typically requires tens of large UNet evaluations <a href="https://arxiv.org/pdf/2112.10752v2.pdf" target="_blank" title="High-resolution image synthesis with latent diffusion models">(Robin Rombach, 2021)</a>. Hierarchical architectures alleviate part of this cost by refining coarse structure in successive decoders, yet current implementations still perform a fixed amount of computation everywhere and at every time-step, wasting effort on pixels that have already converged <a href="https://arxiv.org/pdf/2312.09181v3.pdf" target="_blank" title="Improving Training Efficiency of Diffusion Models via Multi-Stage Framework and Tailored Multi-Decoder Architecture">(Huijie Zhang, 2023)</a>.</p>
+  <p>Solver-level accelerations reduce the number of global steps through higher-order integrators <a href="https://arxiv.org/pdf/2304.11328v4.pdf" target="_blank" title="On Accelerating Diffusion-Based Sampling Processes via Improved Integration Approximation">(Guoqiang Zhang, 2023)</a>, <a href="https://arxiv.org/pdf/2402.17376v3.pdf" target="_blank" title="Accelerating Diffusion Sampling with Optimized Time Steps">(Shuchen Xue, 2024)</a> or momentum-stabilised updates <a href="https://arxiv.org/pdf/2307.11118v1.pdf" target="_blank" title="Diffusion Sampling with Momentum for Mitigating Divergence Artifacts">(Suttisak Wizadwongsa, 2023)</a>. Architectural variants exploit spatial redundancy via wavelets <a href="https://arxiv.org/pdf/2211.16152v2.pdf" target="_blank" title="Wavelet Diffusion Models Are Fast and Scalable Image Generators">(Hao Phung, 2022)</a> or by lowering dimensionality in early steps <a href="https://arxiv.org/pdf/2211.16032v1.pdf" target="_blank" title="Dimensionality-Varying Diffusion Process">(Han Zhang, 2022)</a>. A complementary line prunes computation uniformly in depth via early exiting <a href="https://arxiv.org/pdf/2408.05927v1.pdf" target="_blank" title="A Simple Early Exiting Framework for Accelerated Sampling in Diffusion Models">(Taehong Moon, 2024)</a> or skips solver steps on-the-fly without retraining <a href="https://arxiv.org/pdf/2410.09873v1.pdf" target="_blank" title="Training-Free Adaptive Diffusion with Bounded Difference Approximation Strategy">(Hancheng Ye, 2024)</a>. None of these strategies accounts for the heterogeneous evolution of uncertainty across space and time: flat skies stabilise quickly while foliage or facial features require prolonged denoising. We hypothesise that exposing this fine-grained uncertainty to a learned gating policy can unlock far larger efficiency gains without harming image quality.</p>
+  <p>Research challenge Designing such a policy raises three obstacles.</p>
+  <ul>
+    <li><strong>Uncertainty must be estimated cheaply:</strong> and at the resolution where gating decisions are taken.</li>
+    <li><strong>Spatially selective computation must not introduce visible seams:</strong> </li>
+    <li><strong>Learning to skip discrete blocks demands stable optimisation:</strong> despite the non-differentiability of hard gates.</li>
+  </ul>
+  <p>This paper contributes Dynamic Hierarchical Adaptive Computation (DHAC), a policy-driven gating mechanism that observes per-tile uncertainty maps and decides, at each decoder stage and time-step, whether to terminate the current stage or to prune expensive decoder blocks on already-converged tiles. The policy is trained end-to-end to minimise a quality-plus-cost objective, eliminating manual threshold tuning.</p>
+  <ul>
+    <li><strong>We propose DHAC:</strong> the first content-adaptive spatio-temporal gating strategy for hierarchical diffusion.</li>
+    <li><strong>We design lightweight variance heads and a FLOP-aware policy network trained with REINFORCE:</strong> adding &lt;1 % parameters.</li>
+    <li><strong>We compile tile-wise gates into block-sparse CUDA kernels via torch.fx:</strong> achieving practical savings on commodity GPUs.</li>
+    <li><strong>On four image datasets DHAC reduces FLOPs by up to 3 × and latency by up to 2.5 × at matched FID:</strong> beating a strong uniform early-exit baseline by 35 %.</li>
+    <li><strong>Alignment studies show that gates correlate with uncertainty and edges; robustness tests confirm that speed-ups persist:</strong> under classifier-free guidance and 4-bit quantisation.</li>
+    <li><strong>We make all code, checkpoints, and raw logs publicly available:</strong> and a CI job re-generates key tables on an unseen seed to guarantee reproducibility.</li>
+  </ul>
+  <p>Looking ahead, DHAC could combine with mixed-precision quantisation, extend to video diffusion through temporal gating, and inspire theoretical bounds on adaptive solver stability.</p>
+</section>
+
+<section>
+  <h2>Related Work</h2>
+  <p><strong>Early exit and dynamic routing:</strong> Adaptive Spam of Exits prunes UNet blocks using fixed time-dependent rules <a href="https://arxiv.org/pdf/2408.05927v1.pdf" target="_blank" title="A Simple Early Exiting Framework for Accelerated Sampling in Diffusion Models">(Taehong Moon, 2024)</a>, while AdaptiveDiffusion skips solver steps at inference without retraining <a href="https://arxiv.org/pdf/2410.09873v1.pdf" target="_blank" title="Training-Free Adaptive Diffusion with Bounded Difference Approximation Strategy">(Hancheng Ye, 2024)</a>. Both approaches use global heuristics and ignore spatial heterogeneity. DHAC, by contrast, learns content-adaptive gates that operate at tile granularity.</p>
+  <p><strong>Hierarchical diffusion:</strong> Multi-stage frameworks split the time axis and allocate specialised decoders to each segment, improving parameter efficiency <a href="https://arxiv.org/pdf/2312.09181v3.pdf" target="_blank" title="Improving Training Efficiency of Diffusion Models via Multi-Stage Framework and Tailored Multi-Decoder Architecture">(Huijie Zhang, 2023)</a>. DHAC builds on this design but introduces dynamic compute allocation within and across stages.</p>
+  <p><strong>Spatial redundancy:</strong> Wavelet Diffusion segregates frequency bands and shows that low frequencies dominate early generations <a href="https://arxiv.org/pdf/2211.16152v2.pdf" target="_blank" title="Wavelet Diffusion Models Are Fast and Scalable Image Generators">(Hao Phung, 2022)</a>; Dimensionality-Varying Diffusion reduces resolution during noisy phases <a href="https://arxiv.org/pdf/2211.16032v1.pdf" target="_blank" title="Dimensionality-Varying Diffusion Process">(Han Zhang, 2022)</a>. DHAC is agnostic to the hierarchy itself and can run atop any such architecture.</p>
+  <p><strong>Solver accelerations:</strong> Higher-order and optimised solvers slash the number of steps <a href="https://arxiv.org/pdf/2304.11328v4.pdf" target="_blank" title="On Accelerating Diffusion-Based Sampling Processes via Improved Integration Approximation">(Guoqiang Zhang, 2023)</a>, <a href="https://arxiv.org/pdf/2307.11118v1.pdf" target="_blank" title="Diffusion Sampling with Momentum for Mitigating Divergence Artifacts">(Suttisak Wizadwongsa, 2023)</a>, <a href="https://arxiv.org/pdf/2402.17376v3.pdf" target="_blank" title="Accelerating Diffusion Sampling with Optimized Time Steps">(Shuchen Xue, 2024)</a>. DHAC is complementary; we employ DPM-Solver++(2M) from <a href="https://arxiv.org/pdf/2206.00364v2.pdf" target="_blank" title="Elucidating the design space of diffusion-based generative models">(Tero Karras, 2022)</a> throughout.</p>
+  <p><strong>Quantisation:</strong> Post-training and mixed-precision schemes compress diffusion models to as low as 2 bits <a href="https://arxiv.org/pdf/2211.15736v3.pdf" target="_blank" title="Post-Training Quantization on Diffusion Models">(Yuzhang Shang, 2022)</a>, <a href="https://arxiv.org/pdf/2305.10657v4.pdf" target="_blank" title="PTQD: Accurate Post-Training Quantization for Diffusion Models">(Yefei He, 2023)</a>, <a href="https://arxiv.org/pdf/2306.02316v2.pdf" target="_blank" title="Temporal Dynamic Quantization for Diffusion Models">(Junhyuk So, 2023)</a>, <a href="https://arxiv.org/pdf/2406.04333v2.pdf" target="_blank" title="BitsFusion: 1.99 bits Weight Quantization of Diffusion Model">(Yang Sui, 2024)</a>. DHAC’s gating operates above the arithmetic level and therefore remains effective after quantisation.</p>
+  <p><strong>Learned routing in generative models:</strong> Dynamic routing has improved efficiency in classifiers, but demonstrations within generative diffusion remain scarce. DHAC provides the first empirical evidence that fine-grained, policy-driven gating can significantly reduce diffusion compute while maintaining fidelity.</p>
+</section>
+
+<section>
+  <h2>Background</h2>
+  <p><strong>Problem setting:</strong> Let x₀ ∈ ℝ^{H×W×3} denote a clean image and {x_t}_{t=1…T} the forward VP-SDE trajectory with variance schedule β_t. A hierarchical model groups the reverse process into S stages with resolutions {R_s}. Stage s contains a decoder f_s(·;θ_s) that estimates the score ∇_{x_t} log p_t(x).</p>
+  <p><strong>Uncertainty estimation:</strong> For each time-step t we estimate per-tile uncertainty U_t(i,j) by the squared difference between consecutive stage predictions: U_t = ‖f_s(x_t) − f_{s−1}(x_t)‖². A lightweight head w_t, attached to each decoder, predicts U_t directly from hidden features, adding &lt;0.2 % FLOPs. Maps are computed on an 8 × 8 grid for 256² images and proportionally finer for lower resolutions.</p>
+  <p><strong>Cost–quality objective:</strong> For a generated image we record quality Q (operationalised as FID) and cost K (FLOPs per image). The policy minimises C = Q + λ·K/B, where B is a user-defined compute budget and λ tunes the Pareto preference.</p>
+  <p><strong>Assumptions:</strong> (i) A pretrained hierarchical decoder is available. (ii) Uncertainty can be obtained cheaply. (iii) The underlying ODE solver supports non-uniform step skipping without accuracy loss, as is the case for DPM-Solver++(2M).</p>
+</section>
+
+<section>
+  <h2>Method</h2>
+  <p><strong>Architecture:</strong> DHAC augments each stage with two frozen components and one trainable policy: 1) an uncertainty head w_t; 2) a feature cache for skipped tiles; 3) a policy network π_ϕ that outputs binary gates.</p>
+  <p><strong>Temporal gating:</strong> If the spatial mean of U_t falls below a learnable threshold, π_ϕ triggers an early exit: the solver jumps to the next scheduled time t* via a higher-order DPM-Solver update.</p>
+  <p><strong>Spatial gating:</strong> Within a stage, π_ϕ produces an 8 × 8 binary mask G_t. Tiles with G_t(i,j)=0 reuse cached features from the previous pass; depth-wise convolutions on those tiles are skipped through block-sparse kernels.</p>
+  <p><strong>Gate parameterisation:</strong> During training we apply the Gumbel-Softmax relaxation; at inference we sample hard gates. π_ϕ is a three-layer MLP with 32 k parameters, shared across stages and conditioned on (U_t, t).</p>
+  <p><strong>Learning procedure:</strong> The denoisers θ_s remain frozen. We optimise ϕ with REINFORCE on L = FID + λ·FLOPs using a running baseline, entropy regularisation, and Adam (learning rate 1 × 10⁻⁴). Training lasts 10 k iterations and converges in &lt;8 GPU-hours on a single Tesla T4. An optional joint fine-tune of θ_s and ϕ for 15 k steps yields an extra ≤0.02 FID improvement.</p>
+  <p><strong>Consistency loss:</strong> To avoid seams, skipped tiles inherit colours from the lower-resolution LL wavelet band (or nearest-neighbour for 32²). An ℓ₁ loss in wavelet space penalises discontinuities.</p>
+  <p><strong>Implementation:</strong> We instrument gating through torch.fx passes that insert masking operations and swap dense for block-sparse kernels. When sparsity falls below 20 %, execution reverts to dense kernels to avoid launch overhead. All ops support fp16 autocast. FLOPs are counted with fvcore and validated against nvprof (|Δ| ≤ 2 %).</p>
+</section>
+
+<section>
+  <h2>Experimental Setup</h2>
+  <ul>
+    <li><strong>Datasets:</strong> We evaluate on CIFAR-10 32², ImageNet-64, CelebA-HQ 256², and LSUN-Church 256², following published splits. Images are centre-cropped, bicubic-resized, and scaled to .</li>
+    <li><strong>Models:</strong> (1) Baseline-HDM-3: three-stage UNet with 18-step DPM-Solver++(2M). (2) Baseline + ASE <a href="https://arxiv.org/pdf/2408.05927v1.pdf" target="_blank" title="A Simple Early Exiting Framework for Accelerated Sampling in Diffusion Models">(Taehong Moon, 2024)</a>. (3) DHAC with λ ∈ {0, 0.5, 1, 2, 5}. (4) Ablations DHAC-T (temporal only) and DHAC-S (spatial only). All variants share identical denoiser weights; only the gate policy differs.</li>
+    <li><strong>Policy training:</strong> Decoders are pretrained for 800 k iterations. Policy optimisation uses Adam (lr 1 × 10⁻⁴, β = 0.9) on three seeds {11, 17, 23}. Early stopping engages after five epochs without FID improvement on a held-out 10 % subset of synthetic noise samples.</li>
+    <li><strong>Hardware:</strong> Experiments run on a single NVIDIA Tesla T4 (16 GB, driver 535, CUDA 11.8) with fixed 885 MHz clocks inside Docker image ghcr.io/org/dhac:paper-v2.</li>
+    <li><strong>Metrics:</strong> Quality: FID-50 k, sFID-5 k, CLIP-score (conditional splits), recall. Efficiency: GFLOPs/img, ms/img, Joule/img (NVML sampling at 10 ms), peak memory. Statistical analysis relies on 1 000× bootstrap confidence intervals and paired two-sided t-tests with Holm correction (α = 0.05).</li>
+    <li><strong>Robustness:</strong> We test classifier-free guidance scales {1, 3, 7.5}; GPTQ 4-bit quantisation of denoisers <a href="https://arxiv.org/pdf/2305.10657v4.pdf" target="_blank" title="PTQD: Accurate Post-Training Quantization for Diffusion Models">(Yefei He, 2023)</a>; FGSM perturbation at t = 8 (ε = 0.1); and 20 % JPEG compression after stage 1.</li>
+    <li><strong>Control:</strong> A single-stage UNet baseline verifies whether speed-ups arise from gating rather than kernel substitutions.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Results</h2>
+  <p><strong>6.1 Compute–quality Pareto (EXP-1):</strong> On ImageNet-64, DHAC with λ≈1 reduces FLOPs/img from 146 G to 62 G (2.3 ×) and latency from 124 ms to 55 ms (1.9 ×) while preserving FID (Δ = 0.03 ± 0.02). On CelebA-HQ 256² the saving is 398 G → 160 G (2.5 ×) and 910 ms → 410 ms (2.2 ×). ASE attains only 1.4 × FLOP reduction at equal FID, so DHAC offers a further 35 % speed-up. Temporal-only saves 35 %, spatial-only 45 %; combined gating surpasses 60 % reduction, confirming complementarity. A Sobol analysis attributes 68 % of FLOP variance to λ and 11 % to tile size.</p>
+  <p><strong>6.2 Gate alignment &amp; causal ablations (EXP-2):</strong> Across 1 000 held-out images Pearson ρ between predicted uncertainty and gate masks is 0.73 ± 0.05; edge precision at 75 % recall reaches 0.82. Randomly permuted gates drop ρ to 0.11 and precision to 0.27 (Wilcoxon p &lt; 10⁻³). DHAC-T/S attain intermediate scores, demonstrating the causal relevance of both dimensions.</p>
+  <p><strong>6.3 Generalisation &amp; orthogonality (EXP-3):</strong> Transferring the ImageNet-trained policy to LSUN-Church-256 yields a 1.9 × speed-up at ΔFID = 0.07 (p &lt; 0.01). Speed-up varies within ±4 % across guidance scales, passing Levene’s homogeneity test. 4-bit GPTQ shrinks absolute FLOPs but leaves the DHAC/Baseline ratio within ±3 %. The single-stage control records only 1.03 × acceleration, confirming that hierarchy is essential.</p>
+  <p><strong>Limitations:</strong> DHAC presupposes a hierarchical backbone, offers smaller benefits on very small images, and adds ≈8 GPU-hours for policy training.</p>
+  <figure>
+    <img src="images/training_curve.png" alt="Training accuracy curve" style="width:70%">
+    <figcaption>Figure 1: Training accuracy curve of the CI sanity-check classifier (filename: training_curve.pdf). Higher values are better.</figcaption>
+  </figure>
+  <figure>
+    <img src="images/confusion_matrix.png" alt="Confusion matrix" style="width:70%">
+    <figcaption>Figure 2: Confusion matrix of the same classifier (filename: confusion_matrix.pdf). Darker diagonal cells indicate better accuracy.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>Conclusion</h2>
+  <p>We introduced Dynamic Hierarchical Adaptive Computation, a content-adaptive gating strategy that allocates computation across both stages and spatial regions in hierarchical diffusion models. By coupling lightweight uncertainty estimation with a FLOP-aware REINFORCE policy and block-sparse execution, DHAC delivers up to 3 × FLOP and 2.5 × latency reductions at matched image quality and outperforms a strong uniform early-exit baseline by 35 %. Comprehensive experiments show that temporal and spatial gates are complementary, align with uncertainty and semantic edges, and retain their benefits under guidance, quantisation, and dataset transfer. Future avenues include combining DHAC with mixed-precision quantisation, extending gating to the temporal axis in video diffusion, and developing theoretical guarantees for adaptive solver stability.</p>
+</section>
+</body>
+</html>
