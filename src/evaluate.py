@@ -1,46 +1,50 @@
-"""src/evaluate.py
-Evaluation utilities used by src.main.  The code expects a trained model that
-adheres to the simple forward-API defined in train.py.
+"""
+evaluate.py – evaluation utilities used by src.main.  Currently provides a
+single *evaluate_model* helper that computes overall accuracy on the test
+set and returns both the numeric accuracy and per-sample predictions.
 """
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Dict
+from typing import Tuple
 
+import numpy as np
 import torch
+from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
-import yaml
 
-from .preprocess import load_preprocessed_data
-from .train import LogisticRegression
+__all__ = ["evaluate_model"]
 
-# -------------------------------------------------------------
-#  Evaluation entry point – called by src.main
-# -------------------------------------------------------------
 
-def evaluate_model(cfg_path: Path, model_ckpt: Path) -> Dict[str, float]:
-    """Load a checkpoint and compute accuracy on the validation set.
+def evaluate_model(
+    model: nn.Module,
+    test_ds: TensorDataset,
+    batch_size: int = 64,
+    device: torch.device | str | None = None,
+) -> Tuple[float, np.ndarray]:
+    """Compute accuracy of *model* on *test_ds*.
 
-    Returns a small dict so that src.main can pretty-print results.
+    Returns
+    -------
+    acc : float – classification accuracy in the range [0, 1].
+    preds : np.ndarray – raw integer predictions for every sample.
     """
-    with open(cfg_path, "r") as f:
-        cfg = yaml.safe_load(f)
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if isinstance(device, str):
+        device = torch.device(device)
 
-    (_, _), (x_val, y_val) = load_preprocessed_data(cfg)
-    val_loader = DataLoader(TensorDataset(x_val, y_val), batch_size=cfg["batch_size"], shuffle=False)
-
-    model = LogisticRegression(in_dim=x_val.shape[1], out_dim=len(torch.unique(y_val)))
-    model.load_state_dict(torch.load(model_ckpt, map_location="cpu"))
-    model.eval()
-
+    loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False)
     correct, total = 0, 0
+    all_preds = []
+    model.eval()
     with torch.no_grad():
-        for xb, yb in val_loader:
-            pred = model(xb).argmax(dim=1)
+        for xb, yb in loader:
+            xb, yb = xb.to(device), yb.to(device)
+            logits = model(xb)
+            pred = logits.argmax(dim=1)
+            all_preds.append(pred.cpu().numpy())
             correct += (pred == yb).sum().item()
-            total   += yb.size(0)
+            total += yb.size(0)
 
-    return {
-        "val_accuracy": correct / total if total else 0.0,
-        "num_val_samples": total,
-    }
+    acc = correct / total
+    return acc, np.concatenate(all_preds)

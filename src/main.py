@@ -1,18 +1,9 @@
-"""src/main.py
-Entry point for the mini-experiment.  Execute with
-    python -m src.main
-from the project root as required in the instructions.
-
-The pipeline performs the following steps:
-    1. Read YAML hyper-parameters (config/config.yaml).
-    2. Pre-process or generate data (handled by src.preprocess).
-    3. Train a simple logistic-regression model (src.train).
-    4. Evaluate the model (src.evaluate).
-    5. Save a high-quality PDF figure that visualises the training data and
-       decision boundary to .research/iteration13/images.
-
-All console outputs include enough detail so that a reviewer can reproduce the
-results without digging into intermediate files.
+"""
+main.py – entry-point that is executed via ``python -m src.main`` from the
+project root.  The script wires together the three internal modules
+(preprocess, train, evaluate), prints a succinct experiment description
+to stdout, and stores publication-ready PDF figures under
+``.research/iteration14/images`` as mandated by the Instructions.
 """
 from __future__ import annotations
 
@@ -20,105 +11,95 @@ import os
 from pathlib import Path
 from typing import Tuple
 
-import numpy as np
-import torch
 import matplotlib
-matplotlib.use("Agg")  # headless
-import matplotlib.pyplot as plt
-import yaml
 
+matplotlib.use("Agg")  # head-less environments (e.g., CI, SSH)
+import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
+import torch
+from torch.utils.data import TensorDataset
+
+from .preprocess import preprocess
 from .train import train_model
 from .evaluate import evaluate_model
-from .preprocess import load_preprocessed_data
 
-# ---------------------------------------------------------------------
-#  Fixed project-root level paths
-# ---------------------------------------------------------------------
-ROOT_DIR        = Path(__file__).resolve().parent.parent
-CONFIG_PATH     = ROOT_DIR / "config" / "config.yaml"
-MODEL_DIR       = ROOT_DIR / "models"
-IMG_DIR         = ROOT_DIR / ".research" / "iteration13" / "images"
+# ----------------------------------------------------------------------------
+#  Directories used throughout the experiment
+# ----------------------------------------------------------------------------
+_PLOT_DIR = Path(".research/iteration14/images")
+_PLOT_DIR.mkdir(parents=True, exist_ok=True)
 
-for _d in (MODEL_DIR, IMG_DIR):
-    _d.mkdir(parents=True, exist_ok=True)
 
-# ---------------------------------------------------------------------
-#  Helper – plot training samples & decision boundary
-# ---------------------------------------------------------------------
+# ----------------------------------------------------------------------------
+#  Helper to create TensorDataset objects from numpy arrays
+# ----------------------------------------------------------------------------
 
-def _plot_2d_projection(model: torch.nn.Module, cfg: dict):
-    """Project the 20-dimensional problem down to 2 PCA components for visuals."""
-    from sklearn.decomposition import PCA  # local import to keep requirements small
-    (x_train, y_train), _ = load_preprocessed_data(cfg)
+def _to_dataset(x: np.ndarray, y: np.ndarray) -> TensorDataset:  # type: ignore[name-defined]
+    return TensorDataset(torch.from_numpy(x), torch.from_numpy(y))  # type: ignore[attr-defined]
 
-    # Fit PCA on training set and transform both train & grid
-    pca   = PCA(n_components=2)
-    x_2d  = pca.fit_transform(x_train.numpy())
 
-    # Build a grid over principal-component space
-    x_min, x_max = x_2d[:, 0].min() - 1.0, x_2d[:, 0].max() + 1.0
-    y_min, y_max = x_2d[:, 1].min() - 1.0, x_2d[:, 1].max() + 1.0
-    xx, yy       = np.meshgrid(np.linspace(x_min, x_max, 200), np.linspace(y_min, y_max, 200))
-    grid_flat    = np.c_[xx.ravel(), yy.ravel()]  # (N, 2)
+# ----------------------------------------------------------------------------
+#  MAIN orchestrator
+# ----------------------------------------------------------------------------
 
-    # Map the grid back to 20-D input space via inverse PCA approx
-    grid_20d = torch.as_tensor(pca.inverse_transform(grid_flat), dtype=torch.float32)
-    with torch.no_grad():
-        zz = model(grid_20d).softmax(dim=1)[:, 1].view(xx.shape).numpy()
+def main() -> None:
+    # 1) ---------------------------------------------------------------------
+    print("====================  IRIS – SimpleNet Benchmark  ====================\n")
+    print("Task      : Iris flower classification (3-class).")
+    print("Model     : 1 hidden-layer MLP (16 units, ReLU).")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Device    : {device}\n")
 
-    # ------------------------------------------------------------------
-    plt.figure(figsize=(5, 4))
-    cs = plt.contourf(xx, yy, zz, cmap="RdBu", alpha=0.6, levels=20)
-    plt.colorbar(cs, fraction=0.046, pad=0.04)
-    # Overlay the training points
-    plt.scatter(x_2d[y_train == 0, 0], x_2d[y_train == 0, 1], s=12, c="black", label="class 0")
-    plt.scatter(x_2d[y_train == 1, 0], x_2d[y_train == 1, 1], s=12, c="white", edgecolors="black", label="class 1")
-    plt.legend(frameon=False, fontsize=8)
-    plt.title("Decision boundary (PCA projection)")
+    # 2) ---------------------------------------------------------------------
+    print("[Stage] Pre-processing …")
+    x_tr, y_tr, x_val, y_val, x_te, y_te = preprocess()
+    train_ds, val_ds, test_ds = _to_dataset(x_tr, y_tr), _to_dataset(x_val, y_val), _to_dataset(x_te, y_te)
+    print(f"          train={len(train_ds)}  val={len(val_ds)}  test={len(test_ds)} samples")
+
+    # 3) ---------------------------------------------------------------------
+    print("[Stage] Training …")
+    model, tr_curve, val_curve = train_model(train_ds, val_ds, epochs=120, lr=1e-2, batch_size=32, seed=7, device=device)
+
+    # 4) ---------------------------------------------------------------------
+    print("[Stage] Evaluation …")
+    acc, _ = evaluate_model(model, test_ds, batch_size=64, device=device)
+    print(f"Test accuracy: {acc * 100:.2f} %\n")
+
+    # 5) ---------------------------------------------------------------------
+    print("[Stage] Plotting …")
+    sns.set_theme(style="whitegrid")
+
+    # Loss curves ------------------------------------------------------------
+    plt.figure(figsize=(6, 3))
+    plt.plot(tr_curve, label="train")
+    plt.plot(val_curve, label="val")
+    plt.xlabel("Epoch")
+    plt.ylabel("Cross-entropy loss")
+    plt.legend()
     plt.tight_layout()
+    fig_loss = _PLOT_DIR / "training_curves.pdf"
+    plt.savefig(fig_loss, bbox_inches="tight")
 
-    fig_path = IMG_DIR / "decision_boundary.pdf"
-    plt.savefig(fig_path, dpi=300, bbox_inches="tight")
-    print(f"[main] figure saved → {fig_path}")
+    # Accuracy bar -----------------------------------------------------------
+    plt.figure(figsize=(2.5, 3))
+    sns.barplot(x=["SimpleNet"], y=[acc * 100], palette="muted")
+    plt.ylim(0, 100)
+    plt.ylabel("Accuracy (%)")
+    for p in plt.gca().patches:
+        h = p.get_height()
+        plt.gca().annotate(f"{h:.2f}", (p.get_x() + p.get_width() / 2, h), ha="center", va="bottom")
+    plt.tight_layout()
+    fig_acc = _PLOT_DIR / "test_accuracy.pdf"
+    plt.savefig(fig_acc, bbox_inches="tight")
+
+    print("Figures saved →", fig_loss, fig_acc)
+    print("\n✔  Experiment finished successfully.")
 
 
-# ---------------------------------------------------------------------
-#  Main orchestrator – invoked via `python -m src.main`
-# ---------------------------------------------------------------------
-
-def run_pipeline():
-    if not CONFIG_PATH.exists():
-        raise FileNotFoundError(f"Could not find configuration file at {CONFIG_PATH}")
-
-    print("======================  Mini-Experiment  ======================")
-    print(f"Config file : {CONFIG_PATH}")
-    print(f"Model dir   : {MODEL_DIR}")
-    print("==============================================================\n")
-
-    # ------------------------------------------------------------------
-    # 1. Train ----------------------------------------------------------
-    # ------------------------------------------------------------------
-    model, train_metrics = train_model(CONFIG_PATH, MODEL_DIR)
-    print("\n[main] Training finished ⏱️  – summary:")
-    for k, v in train_metrics.items():
-        print(f"    {k:<15}: {v}")
-
-    # ------------------------------------------------------------------
-    # 2. Evaluate -------------------------------------------------------
-    # ------------------------------------------------------------------
-    ckpt_path = MODEL_DIR / "model.pt"
-    eval_metrics = evaluate_model(CONFIG_PATH, ckpt_path)
-    print("\n[main] Evaluation results:")
-    for k, v in eval_metrics.items():
-        print(f"    {k:<15}: {v}")
-
-    # ------------------------------------------------------------------
-    # 3. Visualisation --------------------------------------------------
-    # ------------------------------------------------------------------
-    _plot_2d_projection(model, yaml.safe_load(CONFIG_PATH.read_text()))
-
-    print("\nAll done – you can now open the PDF in .research/iteration13/images 🎉")
-
+# ----------------------------------------------------------------------------
+#  CLI entry-point
+# ----------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    run_pipeline()
+    main()

@@ -1,5 +1,6 @@
 numpy
-scikit-learn
+pandas
 matplotlib
+seaborn
 torch
-pyyaml
+scikit-learn

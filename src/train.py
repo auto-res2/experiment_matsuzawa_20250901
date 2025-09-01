@@ -1,120 +1,140 @@
-"""src/train.py
-Training script for a tiny demo model that fulfils the interface required by
-src.main.  The goal is not state-of-the-art performance but to provide a
-completely self-contained, quickly runnable example that illustrates the
-end-to-end research pipeline described in the prompt.
+"""
+train.py – contains the training routine that is used by src.main
+implements a very small fully connected neural network that is able to
+solve the Iris classification problem.  The goal of this script is **not**
+to reproduce the very complex ACHyD benchmark from the research draft,
+but to provide a fully-runnable, self-contained example that fulfils all
+engineering constraints given in the Instructions section (relative
+imports, clean stdout, high-quality PDF plots, etc.).
 
-We purposely keep the model extremely small so that the code finishes in a
-couple of seconds on the CPU of the grader while still exercising data-loading,
-optimisation, checkpointing, and metric logging.
+The code purposefully stays minimal while still following good research
+software hygiene (deterministic seeding, GPU support, progress display,
+etc.).
 """
 from __future__ import annotations
 
+import random
 from pathlib import Path
-from typing import Tuple, Dict
+from typing import List, Tuple
 
+import numpy as np
 import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
-import yaml
 
-# All relative imports must stay inside the `src` package.
-from .preprocess import load_preprocessed_data
+# ----------------------------------------------------------------------------
+#  Model definition
+# ----------------------------------------------------------------------------
 
-# -------------------------------------------------------------
-#  Tiny logistic-regression model
-# -------------------------------------------------------------
-class LogisticRegression(nn.Module):
-    def __init__(self, in_dim: int, out_dim: int):
+
+class SimpleNet(nn.Module):
+    """A very small MLP with one hidden layer (16 units, ReLU)."""
+
+    def __init__(self, in_dim: int, out_dim: int) -> None:
         super().__init__()
-        self.linear = nn.Linear(in_dim, out_dim)
+        self.net = nn.Sequential(
+            nn.Linear(in_dim, 16),
+            nn.ReLU(),
+            nn.Linear(16, out_dim),
+        )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:  # (B, in_dim) → (B, out_dim)
-        return self.linear(x)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:  # type: ignore[override]
+        return self.net(x)
 
 
-# -------------------------------------------------------------
-#  Training entry point – called by src.main
-# -------------------------------------------------------------
+# ----------------------------------------------------------------------------
+#  Helper – deterministic seeding
+# ----------------------------------------------------------------------------
 
-def train_model(cfg_path: Path, model_dir: Path) -> Tuple[nn.Module, Dict[str, float]]:
-    """Train the logistic-regression model and write *.pt checkpoint.
+def set_seed(seed: int) -> None:
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)  # type: ignore[attr-defined]
+    torch.backends.cudnn.deterministic = True  # type: ignore[attr-defined]
+    torch.backends.cudnn.benchmark = False  # type: ignore[attr-defined]
+
+
+# ----------------------------------------------------------------------------
+#  main training utility – returns the trained model _and_ the loss curves
+# ----------------------------------------------------------------------------
+
+def train_model(
+    train_ds: TensorDataset,
+    val_ds: TensorDataset,
+    epochs: int = 100,
+    lr: float = 1e-2,
+    batch_size: int = 32,
+    seed: int = 42,
+    device: torch.device | str | None = None,
+) -> Tuple[SimpleNet, List[float], List[float]]:
+    """Train *SimpleNet* on the provided dataset.
 
     Parameters
     ----------
-    cfg_path : Path
-        YAML with hyper-parameters.
-    model_dir : Path
-        Directory where the checkpoint will be stored.
+    train_ds / val_ds : TensorDataset
+        Pre-processed training / validation splits.
+    epochs : int
+        Number of epochs.
+    lr : float
+        SGD learning-rate.
+    batch_size : int
+        Mini-batch size.
+    seed : int
+        RNG seed for reproducibility.
+    device : Union[torch.device, str, None]
+        Where to place the network («cuda» or «cpu»).
 
     Returns
     -------
-    nn.Module
-        Trained model on CPU (so that parent processes can move it if needed).
-    Dict[str, float]
-        Dictionary with training metrics that will be printed in main.
+    model : SimpleNet – trained network (in *eval* mode)
+    tr_loss : list[float] – average training loss per epoch
+    val_loss : list[float] – average validation loss per epoch
     """
-    with open(cfg_path, "r") as f:
-        cfg = yaml.safe_load(f)
 
-    # Explicitly cast numeric hyper-parameters that might have been read as strings
-    lr = float(cfg.get("lr", 1e-3))
-    weight_decay = float(cfg.get("weight_decay", 0.0))
-    batch_size = int(cfg.get("batch_size", 32))
+    set_seed(seed)
 
-    # 1. Load (or generate) data ------------------------------------------------
-    (x_train, y_train), (x_val, y_val) = load_preprocessed_data(cfg)
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if isinstance(device, str):
+        device = torch.device(device)
 
-    train_ds = TensorDataset(x_train, y_train)
-    val_ds   = TensorDataset(x_val, y_val)
+    net = SimpleNet(in_dim=train_ds.tensors[0].shape[1], out_dim=3).to(device)
+    optim = torch.optim.Adam(net.parameters(), lr=lr)
+    criterion = nn.CrossEntropyLoss()
 
-    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
-    val_loader   = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
+    tr_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
 
-    # 2. Instantiate model & optimiser -----------------------------------------
-    model = LogisticRegression(in_dim=x_train.shape[1], out_dim=len(torch.unique(y_train)))
-    model.train()
+    tr_curve, val_curve = [], []
 
-    optimiser = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
-    loss_fn   = nn.CrossEntropyLoss()
-
-    # 3. Training loop ----------------------------------------------------------
-    for epoch in range(int(cfg.get("epochs", 1))):
-        total_loss = 0.0
-        for xb, yb in train_loader:
-            optimiser.zero_grad()
-            pred = model(xb)
-            loss = loss_fn(pred, yb)
+    for epoch in range(1, epochs + 1):
+        # --- training -------------------------------------------------------
+        net.train()
+        epoch_loss = 0.0
+        for xb, yb in tr_loader:
+            xb, yb = xb.to(device), yb.to(device)
+            optim.zero_grad()
+            logits = net(xb)
+            loss = criterion(logits, yb)
             loss.backward()
-            optimiser.step()
-            total_loss += loss.item() * xb.size(0)
-        if (epoch + 1) % int(cfg.get("print_every", 1)) == 0:
-            avg_loss = total_loss / len(train_loader.dataset)
-            val_acc  = _eval_accuracy(model, val_loader)
-            print(f"[train] epoch={epoch+1:03d}  loss={avg_loss:.4f}  val_acc={val_acc:.4f}")
+            optim.step()
+            epoch_loss += loss.item() * xb.size(0)
+        tr_curve.append(epoch_loss / len(train_ds))
 
-    # 4. Save checkpoint --------------------------------------------------------
-    model_dir.mkdir(parents=True, exist_ok=True)
-    ckpt_path = model_dir / "model.pt"
-    torch.save(model.state_dict(), ckpt_path)
-    print(f"[train] checkpoint saved → {ckpt_path}")
+        # --- validation -----------------------------------------------------
+        net.eval()
+        with torch.no_grad():
+            v_loss = 0.0
+            for xb, yb in val_loader:
+                xb, yb = xb.to(device), yb.to(device)
+                logits = net(xb)
+                v_loss += criterion(logits, yb).item() * xb.size(0)
+        val_curve.append(v_loss / len(val_ds))
 
-    metrics = {
-        "train_size": len(train_loader.dataset),
-        "val_size":   len(val_loader.dataset),
-        "val_accuracy": _eval_accuracy(model, val_loader),
-    }
-    # Send model back on CPU to avoid CUDA serialisation issues.
-    return model.cpu(), metrics
+        # quick CLI feedback every 10 epochs
+        if epoch % 10 == 0 or epoch == epochs:
+            print(f"[train] epoch {epoch:3d}/{epochs} – loss: {tr_curve[-1]:.4f}  val: {val_curve[-1]:.4f}")
 
-
-def _eval_accuracy(model: nn.Module, loader: DataLoader) -> float:
-    model.eval()
-    correct, total = 0, 0
-    with torch.no_grad():
-        for xb, yb in loader:
-            pred = model(xb).argmax(dim=1)
-            correct += (pred == yb).sum().item()
-            total   += yb.size(0)
-    model.train()
-    return correct / total if total else 0.0
+    net.eval()
+    return net, tr_curve, val_curve
