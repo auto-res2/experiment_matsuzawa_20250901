@@ -1,11 +1,11 @@
 {
   "research_topic": "階層的拡散モデルの計算効率に関して改善したい",
   "queries": [
-    "hierarchical diffusion acceleration",
-    "diffusion model efficiency",
+    "hierarchical diffusion efficiency",
+    "diffusion model acceleration",
     "multi-scale diffusion optimization",
-    "coarse-to-fine diffusion speedup",
-    "hierarchical denoising efficiency"
+    "efficient diffusion sampling",
+    "hierarchical diffusion acceleration"
   ],
   "research_study_list": [
     {
