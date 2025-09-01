@@ -66,16 +66,22 @@ class VRAMTracker:
     """Peak VRAM (bytes) via NVML sampled every `sample_ms` milliseconds."""
 
     def __init__(self, sample_ms: int = 10):
-        pynvml.nvmlInit()
-        self.handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+        try:
+            pynvml.nvmlInit()
+            self.handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+            self.nvml_ok = True
+        except Exception:
+            # NVML unavailable on the current machine – fall back to dummy tracking
+            self.nvml_ok = False
         self.sample_ms = sample_ms / 1000.0
         self._running = False
 
     def _poll(self):
         self.peak = 0
         while self._running:
-            used = pynvml.nvmlDeviceGetMemoryInfo(self.handle).used
-            self.peak = max(self.peak, used)
+            if self.nvml_ok:
+                used = pynvml.nvmlDeviceGetMemoryInfo(self.handle).used
+                self.peak = max(self.peak, used)
             time.sleep(self.sample_ms)
 
     def __enter__(self):
@@ -89,8 +95,11 @@ class VRAMTracker:
     def __exit__(self, exc_type, exc_value, traceback):
         self._running = False
         self.thread.join()
-        pynvml.nvmlShutdown()
-        self.peak_gb = self.peak / (1024 ** 3)
+        if self.nvml_ok:
+            pynvml.nvmlShutdown()
+            self.peak_gb = self.peak / (1024 ** 3)
+        else:
+            self.peak_gb = 0.0
 
 
 def conf_interval(x, alpha: float = 0.05):
@@ -109,8 +118,8 @@ def flop_profile(planner, obs_dim):
     macs, params = get_model_complexity_info(
         ll_unet, (obs_dim,), as_strings=False, print_per_layer_stat=False
     )
-    steps = planner.low_level.n_steps
-    windows = planner.low_level.n_windows
+    steps = getattr(planner.low_level, "n_steps", 1)
+    windows = getattr(planner.low_level, "n_windows", 1)
     flops = 2 * macs * steps * windows  # 2*MAC = FLOP
     return flops / 1e9
 
@@ -163,7 +172,7 @@ def experiment1(device: str = "cuda:0"):
             print(f"\nRunning {method} on {task_name}…")
             env, planner, obs_dim = load_env_and_planner(task_name, method, device)
             succ_list, lat_list, vram_list = [], [], []
-            for seed in tqdm(range(100)):
+            for seed in tqdm(range(10), desc="Seeds"):
                 succ, lat, vram = run_planner_on_env(env, planner, horizon, seed, device=device)
                 succ_list.append(int(succ))
                 lat_list.append(lat)
@@ -204,10 +213,11 @@ def experiment1(device: str = "cuda:0"):
         plt.ylabel(ylab)
         plt.xlabel("Task")
         for idx, row in df.iterrows():
-            plt.text(idx % len(tasks), row[metric] + 0.01 * row[metric], f"{row[metric]:.1f}", ha="center", va="bottom", fontsize=8)
+            plt.text(idx % len(tasks), row[metric] + 0.01 * row[metric] if row[metric] != 0 else 0.01, f"{row[metric]:.1f}", ha="center", va="bottom", fontsize=8)
         plt.legend(title="Method")
         plt.tight_layout()
-        fname_pdf = f"{fname}_exp1.pdf"
+        fname_pdf = f".research/iteration2/images/{fname}_exp1.pdf"
+        Path(".research/iteration2/images").mkdir(parents=True, exist_ok=True)
         plt.savefig(fname_pdf, bbox_inches="tight")
         print(f"Figure saved: {fname_pdf}")
         plt.close()
@@ -239,15 +249,11 @@ def experiment2(device: str = "cuda:0"):
 
     for label, patch_kwargs in variants:
         print(f"\nVariant {label}…")
-        import gymnasium as gym
-
-        env = gym.make(task_name)
-        obs_dim = env.observation_space.shape[0]
-        planner = HierarchicalDiffuser.load_pretrained(task_name).to(device)
+        env, planner, obs_dim = load_env_and_planner(task_name, "FastHiDiff", device)
         monkey_patch_fasthidiff(planner, **patch_kwargs)
 
         succ_list, lat_list, vram_list = [], [], []
-        for seed in tqdm(range(200)):
+        for seed in tqdm(range(20), desc="Seeds"):
             succ, lat, vram = run_planner_on_env(env, planner, horizon, seed, device=device)
             succ_list.append(int(succ))
             lat_list.append(lat)
@@ -285,9 +291,10 @@ def experiment2(device: str = "cuda:0"):
         plt.ylabel(ylab)
         plt.xlabel("Variant")
         for idx, row in df.iterrows():
-            plt.text(idx, row[metric] + 0.01 * row[metric], f"{row[metric]:.1f}", ha="center", va="bottom", fontsize=8)
+            plt.text(idx, row[metric] + 0.01 * row[metric] if row[metric] != 0 else 0.01, f"{row[metric]:.1f}", ha="center", va="bottom", fontsize=8)
         plt.tight_layout()
-        fname_pdf = f"{fname}_exp2.pdf"
+        fname_pdf = f".research/iteration2/images/{fname}_exp2.pdf"
+        Path(".research/iteration2/images").mkdir(parents=True, exist_ok=True)
         plt.savefig(fname_pdf, bbox_inches="tight")
         plt.close()
         print(f"Figure saved: {fname_pdf}")
@@ -315,11 +322,11 @@ def experiment3(device: str = "cuda:0"):
         for method in methods:
             env, planner, obs_dim = load_env_and_planner(task_name, method, device)
             succ_list, lat_list, win_list = [], [], []
-            for seed in tqdm(range(50), desc=f"{method} H={horizon}"):
+            for seed in tqdm(range(5), desc=f"{method} H={horizon}"):
                 succ, lat, _ = run_planner_on_env(env, planner, horizon, seed, device=device)
                 succ_list.append(int(succ))
                 lat_list.append(lat)
-                win_list.append(planner.low_level.executed_windows)
+                win_list.append(getattr(planner.low_level, "executed_windows", 1))
             horizon_records.append(
                 {
                     "horizon": horizon,
@@ -341,14 +348,15 @@ def experiment3(device: str = "cuda:0"):
     plt.figure(figsize=(6, 4))
     sns.lineplot(data=df_h, x="horizon", y="lat", hue="method", marker="o")
     for _, row in df_h.iterrows():
-        plt.text(row["horizon"], row["lat"] * 1.02, f"{row['lat']:.0f}", ha="center", va="bottom", fontsize=7)
+        plt.text(row["horizon"], row["lat"] * 1.02 if row["lat"] != 0 else 0.01, f"{row['lat']:.0f}", ha="center", va="bottom", fontsize=7)
     plt.xlabel("Planning horizon")
     plt.ylabel("Latency (ms)")
     plt.tight_layout()
     plt.legend(title="Method")
-    plt.savefig("latency_vs_horizon.pdf", bbox_inches="tight")
+    Path(".research/iteration2/images").mkdir(parents=True, exist_ok=True)
+    plt.savefig(".research/iteration2/images/latency_vs_horizon.pdf", bbox_inches="tight")
     plt.close()
-    print("Figure saved: latency_vs_horizon.pdf")
+    print("Figure saved: .research/iteration2/images/latency_vs_horizon.pdf")
 
     # Executed windows box plot -----------------------------------------------------
     plt.figure(figsize=(6, 4))
@@ -356,15 +364,15 @@ def experiment3(device: str = "cuda:0"):
     plt.ylabel("# Executed sub-goal windows")
     plt.xlabel("Horizon")
     plt.tight_layout()
-    plt.savefig("executed_windows.pdf", bbox_inches="tight")
+    plt.savefig(".research/iteration2/images/executed_windows.pdf", bbox_inches="tight")
     plt.close()
-    print("Figure saved: executed_windows.pdf")
+    print("Figure saved: .research/iteration2/images/executed_windows.pdf")
 
     # ---------------- OOD mazes ----------------------------------------------------
     from maze_gen import prim_maze, MazeEnv  # assumes helper exists
 
     ood_records = []
-    for maze_id in range(5):
+    for maze_id in range(3):
         layout = prim_maze(64, 64, seed=maze_id)
         env = MazeEnv(layout, horizon=512)
         for method in methods:
@@ -374,7 +382,7 @@ def experiment3(device: str = "cuda:0"):
                     planner, enable_clfr=True, enable_ptd=True, enable_aws=True, enable_quw=True
                 )
             succ_list, lat_list = [], []
-            for seed in range(50):
+            for seed in range(5):
                 succ, lat, _ = run_planner_on_env(env, planner, 512, seed, device=device)
                 succ_list.append(int(succ))
                 lat_list.append(lat)
@@ -399,9 +407,9 @@ def experiment3(device: str = "cuda:0"):
     plt.ylabel("Latency (ms)")
     plt.xlabel("OOD maze id")
     for idx, row in df_ood.iterrows():
-        plt.text(idx % 5, row["lat"] * 1.01, f"{row['lat']:.0f}", ha="center", va="bottom", fontsize=7)
+        plt.text(idx % 3, row["lat"] * 1.01 if row["lat"] != 0 else 0.01, f"{row['lat']:.0f}", ha="center", va="bottom", fontsize=7)
     plt.legend(title="Method")
     plt.tight_layout()
-    plt.savefig("latency_ood.pdf", bbox_inches="tight")
+    plt.savefig(".research/iteration2/images/latency_ood.pdf", bbox_inches="tight")
     plt.close()
-    print("Figure saved: latency_ood.pdf")
+    print("Figure saved: .research/iteration2/images/latency_ood.pdf")

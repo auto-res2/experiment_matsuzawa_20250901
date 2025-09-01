@@ -1,17 +1,8 @@
 torch
 numpy
 gymnasium
-d4rl
 matplotlib
 seaborn
 pandas
 tqdm
-ptflops
-pynvml
 scipy
-hdiff
-fasthidiff
-fasterdiffusion
-dpmsolvers
-flatdiffuser
-maze_gen
