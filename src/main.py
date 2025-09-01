@@ -1,58 +1,74 @@
 """src/main.py
-Single entry-point for the whole project – executed via `python -m src.main`.
-The script wires together preprocessing, (dummy) training and evaluation so
-that the experiment runs end-to-end with one command and produces artefacts
-that satisfy the requirements.
+Run the complete experiment via
+    python -m src.main
 """
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Dict
+import yaml
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
-from rich import print as rprint
+from .preprocess import make_dataloaders
+from .train import train
+from .evaluate import evaluate
 
-from . import preprocess as _pre
-from . import train as _train
-from . import evaluate as _eval
-
-
-# -----------------------------------------------------------------------------
-#  Parse CLI arguments first so that the other modules can use the flags.
-# -----------------------------------------------------------------------------
-
-def _cli() -> argparse.Namespace:  # noqa: D401
-    parser = argparse.ArgumentParser(description="End-to-end DHAC toy pipeline")
-    parser.add_argument("--exp", type=int, default=1, choices=[1, 2, 3], help="Which experiment to run (subset implemented)")
-    return parser.parse_args()
+# ----------------------------------------------------------------------------
+# Helper
+# ----------------------------------------------------------------------------
+IMAGES_DIR = Path(".research/iteration5/images")
+MODELS_DIR = Path("models")
 
 
-# -----------------------------------------------------------------------------
-#  Main orchestrator
-# -----------------------------------------------------------------------------
+def _plot_training_curve(loss_hist, acc_hist, pdf_path: Path):
+    fig, ax1 = plt.subplots(figsize=(6, 4))
+    ax1.plot(loss_hist, label="train-loss", color="tab:red")
+    ax1.set_xlabel("epoch")
+    ax1.set_ylabel("loss", color="tab:red")
+    ax1.tick_params(axis="y", labelcolor="tab:red")
+    ax2 = ax1.twinx()
+    ax2.plot(acc_hist, label="val-acc", color="tab:blue")
+    ax2.set_ylabel("accuracy (%)", color="tab:blue")
+    ax2.tick_params(axis="y", labelcolor="tab:blue")
+    fig.tight_layout()
+    pdf_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(pdf_path, format="pdf")
+    plt.close(fig)
 
 
-def main() -> None:  # noqa: D401
-    args = _cli()
+# ----------------------------------------------------------------------------
+# main
+# ----------------------------------------------------------------------------
 
-    # 1. Pre-processing – create tiny synthetic datasets
-    rprint("[bold cyan]\n▶ Pre-processing synthetic datasets…")
-    dataset_roots: Dict[str, Path] = _pre.run()
+def main(cfg_path: Path):
+    with cfg_path.open() as f:
+        cfg = yaml.safe_load(f)
 
-    # 2. Training – fit a toy CNN so that we have weights on disk
-    rprint("[bold cyan]\n▶ Training dummy model…")
-    _train.run({"data_root": dataset_roots["imagenet64"], "model_dir": "models"})
+    train_loader, val_loader, test_loader = make_dataloaders(cfg)
 
-    # 3. Evaluation / experiments – lightweight reproduction of EXP-1
-    rprint("[bold cyan]\n▶ Running evaluation / experiments…")
-    _eval.run(args.exp, dataset_roots)
+    print("[INFO] Starting training …")
+    model, loss_hist, val_acc_hist = train(train_loader, val_loader, cfg, MODELS_DIR)
 
-    rprint("\n[bold green]Finished – artefacts are stored in ./outputs and ./.research/iteration4/images")
+    print("[INFO] Evaluating …")
+    test_acc = evaluate(model, test_loader, IMAGES_DIR)
 
+    print("========== Final Results ==========")
+    print(f"Test accuracy : {test_acc:.2f}%")
 
-# -----------------------------------------------------------------------------
-#  Python module entry-point
-# -----------------------------------------------------------------------------
+    # -------- training curve figure --------
+    _plot_training_curve(loss_hist, val_acc_hist, IMAGES_DIR / "training_curve.pdf")
+    print(f"All figures saved to {IMAGES_DIR.resolve()}")
+
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser("Toy DHAC experiment")
+    parser.add_argument(
+        "--config",
+        default="config/params.yaml",
+        type=Path,
+        help="Path to the YAML config file.",
+    )
+    args = parser.parse_args()
+    main(args.config)

@@ -1,0 +1,6 @@
+# config/params.yaml
+# Hyper-parameters for the toy experiment
+batch_size: 128
+epochs: 5
+lr: 0.001
+num_classes: 10

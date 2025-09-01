@@ -1,62 +1,45 @@
 """src/preprocess.py
-Generates small synthetic *real* datasets required by the evaluation phase so
-that clean-fid has something to compare against.  Each dataset is a directory
-structure that mimics the one expected by DHACRunner:
-
-    data/<dataset_name>/real_cache/*.png
+Dataset downloading / preprocessing utilities.
 """
 from __future__ import annotations
 
-import random
 from pathlib import Path
-from typing import Dict, List
+from typing import Tuple, Dict
 
-import numpy as np
 import torch
-from torchvision.utils import save_image
-
-__all__ = ["run"]
-
-
-DATASETS = {
-    "imagenet64": (3, 64, 64),
-    "celeba256": (3, 256, 256),
-    "lsun_church": (3, 256, 256),
-    "cifar10": (3, 32, 32),
-}
+from torch.utils.data import DataLoader, random_split
+from torchvision import datasets, transforms
 
 
-def _make_real_dataset(root: Path, shape: tuple[int, int, int], n_img: int = 10) -> None:
-    root.mkdir(parents=True, exist_ok=True)
-    for i in range(n_img):
-        img = torch.rand(*shape)
-        save_image(img, root / f"real_{i}.png")
+# -----------------------------------------------------------------------------
+# Public API
+# -----------------------------------------------------------------------------
 
+def make_dataloaders(cfg: Dict) -> Tuple[DataLoader, DataLoader, DataLoader]:
+    """Return train/val/test *DataLoader*s according to *cfg*.
 
-def _make_train_tensor(root: Path, shape: tuple[int, int, int], n_img: int = 128) -> None:
-    """Create and save a tensor that will be used for training the TinyCNN.
-
-    The tensor is saved at `<root>/train.pt` so that `src/train.py` can load it
-    directly. Images are sampled uniformly in [0,1].
+    The loaders are cached under ./data automatically by *torchvision*.
     """
-    c, h, w = shape
-    imgs = torch.rand(n_img, c, h, w)
-    torch.save(imgs, root / "train.pt")
+    batch_size = cfg.get("batch_size", 128)
 
+    transform = transforms.Compose(
+        [
+            transforms.ToTensor(),
+            transforms.Normalize((0.5,), (0.5,)),
+            transforms.Lambda(lambda x: x.expand(3, -1, -1)),  # gray → RGB for CNN
+        ]
+    )
 
-def run() -> Dict[str, Path]:  # noqa: D401
-    """Create synthetic *real* datasets and return a mapping <name -> path>."""
-    random.seed(0)
-    np.random.seed(0)
-    torch.manual_seed(0)
+    root = Path("data")
+    ds_full = datasets.MNIST(root, download=True, train=True, transform=transform)
+    ds_test = datasets.MNIST(root, download=True, train=False, transform=transform)
 
-    base = Path("data")
-    out: Dict[str, Path] = {}
+    n_train = int(0.9 * len(ds_full))
+    n_val = len(ds_full) - n_train
+    ds_train, ds_val = random_split(ds_full, [n_train, n_val])
 
-    for name, shape in DATASETS.items():
-        dataset_root = base / name
-        real_root = dataset_root / "real_cache"
-        _make_real_dataset(real_root, shape)
-        _make_train_tensor(dataset_root, shape)
-        out[name] = dataset_root
-    return out
+    loader_train = DataLoader(ds_train, batch_size=batch_size, shuffle=True, num_workers=2)
+    loader_val = DataLoader(ds_val, batch_size=batch_size, shuffle=False, num_workers=2)
+    loader_test = DataLoader(ds_test, batch_size=batch_size, shuffle=False, num_workers=2)
+
+    return loader_train, loader_val, loader_test
