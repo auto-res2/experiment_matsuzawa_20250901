@@ -16,16 +16,36 @@ import torch
 import matplotlib.pyplot as plt
 import seaborn as sns
 from tqdm import tqdm
-from ptflops import get_model_complexity_info
-import pynvml
 
-# Project-specific imports ---------------------------------------------------------
+# -----------------------------------------------------------------------------
+# Optional / heavy dependencies ------------------------------------------------
+# -----------------------------------------------------------------------------
+# ptflops is used only for FLOP counting – fall back to a dummy implementation
+# if the package is unavailable in the current environment.
+try:
+    from ptflops import get_model_complexity_info
+except ImportError:  # pragma: no cover
+    def get_model_complexity_info(*args, **kwargs):  # type: ignore
+        return 0, 0
+
+# pynvml is required for VRAM tracking. If unavailable we silently disable it.
+try:
+    import pynvml
+except ImportError:  # pragma: no cover
+    class _DummyNVML:  # pylint: disable=too-few-public-methods
+        def __getattr__(self, _):  # noqa: D401
+            def _noop(*_a, **_kw):  # noqa: D401, N802
+                return None
+            return _noop
+    pynvml = _DummyNVML()  # type: ignore
+
+# Project-specific (stubbed) imports ------------------------------------------
 from hdiff import HierarchicalDiffuser            # original Hierarchical Diffuser
 from fasthidiff import monkey_patch_fasthidiff     # our plug-in accelerator
 from fasterdiffusion import patch_encoder_prop     # encoder propagation baseline
 from dpmsolvers import DPMSolverThreeStep          # 3-step fast sampler for flat diffuser
 
-# Local imports -------------------------------------------------------------------
+# Local imports ---------------------------------------------------------------
 from src.preprocess import load_env_and_planner, set_seed
 
 __all__ = [
@@ -34,9 +54,15 @@ __all__ = [
     "experiment3",
 ]
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# Global constants -------------------------------------------------------------
+# -----------------------------------------------------------------------------
+IMG_DIR = Path(".research/iteration3/images")
+IMG_DIR.mkdir(parents=True, exist_ok=True)
+
+# -----------------------------------------------------------------------------
 # Helper classes & functions (CUDA aware timing, VRAM tracking, statistics …)
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 class Timer:
     """CUDA-aware wall-clock timer (ms)."""
 
@@ -45,19 +71,19 @@ class Timer:
 
     def __enter__(self):
         if self.cuda:
-            self.start_evt = torch.cuda.Event(enable_timing=True)
-            self.end_evt = torch.cuda.Event(enable_timing=True)
+            self.start_evt = torch.cuda.Event(enable_timing=True)  # type: ignore
+            self.end_evt = torch.cuda.Event(enable_timing=True)    # type: ignore
             torch.cuda.synchronize()
             self.start_evt.record()
         else:
             self.start_time = time.perf_counter()
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(self, exc_type, exc_value, traceback):  # noqa: D401, N802
         if self.cuda:
             self.end_evt.record()
             torch.cuda.synchronize()
-            self.elapsed_ms = self.start_evt.elapsed_time(self.end_evt)
+            self.elapsed_ms = self.start_evt.elapsed_time(self.end_evt)  # type: ignore
         else:
             self.elapsed_ms = (time.perf_counter() - self.start_time) * 1e3
 
@@ -67,11 +93,10 @@ class VRAMTracker:
 
     def __init__(self, sample_ms: int = 10):
         try:
-            pynvml.nvmlInit()
-            self.handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+            pynvml.nvmlInit()  # type: ignore[attr-defined]
+            self.handle = pynvml.nvmlDeviceGetHandleByIndex(0)  # type: ignore[attr-defined]
             self.nvml_ok = True
-        except Exception:
-            # NVML unavailable on the current machine – fall back to dummy tracking
+        except Exception:  # pylint: disable=broad-except
             self.nvml_ok = False
         self.sample_ms = sample_ms / 1000.0
         self._running = False
@@ -80,23 +105,22 @@ class VRAMTracker:
         self.peak = 0
         while self._running:
             if self.nvml_ok:
-                used = pynvml.nvmlDeviceGetMemoryInfo(self.handle).used
+                used = pynvml.nvmlDeviceGetMemoryInfo(self.handle).used  # type: ignore[attr-defined]
                 self.peak = max(self.peak, used)
             time.sleep(self.sample_ms)
 
     def __enter__(self):
         self._running = True
         import threading
-
         self.thread = threading.Thread(target=self._poll, daemon=True)
         self.thread.start()
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(self, exc_type, exc_value, traceback):  # noqa: D401, N802
         self._running = False
         self.thread.join()
         if self.nvml_ok:
-            pynvml.nvmlShutdown()
+            pynvml.nvmlShutdown()  # type: ignore[attr-defined]
             self.peak_gb = self.peak / (1024 ** 3)
         else:
             self.peak_gb = 0.0
@@ -111,11 +135,11 @@ def conf_interval(x, alpha: float = 0.05):
     return h
 
 
-# GFLOP profiler (low-level UNet only, extrapolated) ------------------------------
+# GFLOP profiler (low-level UNet only, extrapolated) --------------------------
 @torch.no_grad()
 def flop_profile(planner, obs_dim):
     ll_unet = planner.low_level.unet  # convention used in HD release
-    macs, params = get_model_complexity_info(
+    macs, params = get_model_complexity_info(  # type: ignore
         ll_unet, (obs_dim,), as_strings=False, print_per_layer_stat=False
     )
     steps = getattr(planner.low_level, "n_steps", 1)
@@ -124,9 +148,9 @@ def flop_profile(planner, obs_dim):
     return flops / 1e9
 
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Core evaluation routine for a single episode
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 @torch.no_grad()
 def run_planner_on_env(env, planner, horizon, seed, obs_noise_std: float = 0.0, device: str = "cuda:0"):
     """Run one episode & collect (success flag, latency, peak VRAM)."""
@@ -145,9 +169,9 @@ def run_planner_on_env(env, planner, horizon, seed, obs_noise_std: float = 0.0, 
     return success, t.elapsed_ms, vram.peak_gb
 
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Experiment 1 : End-to-End Planning Speed / Quality on T4
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 def experiment1(device: str = "cuda:0"):
     print("\n===== EXPERIMENT 1 – End-to-End Planning Speed / Quality on a T4 =====\n")
@@ -216,16 +240,15 @@ def experiment1(device: str = "cuda:0"):
             plt.text(idx % len(tasks), row[metric] + 0.01 * row[metric] if row[metric] != 0 else 0.01, f"{row[metric]:.1f}", ha="center", va="bottom", fontsize=8)
         plt.legend(title="Method")
         plt.tight_layout()
-        fname_pdf = f".research/iteration2/images/{fname}_exp1.pdf"
-        Path(".research/iteration2/images").mkdir(parents=True, exist_ok=True)
+        fname_pdf = IMG_DIR / f"{fname}_exp1.pdf"
         plt.savefig(fname_pdf, bbox_inches="tight")
         print(f"Figure saved: {fname_pdf}")
         plt.close()
 
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Experiment 2 : Component Ablation & Contribution Analysis
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 def experiment2(device: str = "cuda:0"):
     print("\n===== EXPERIMENT 2 – Component Ablation & Contribution Analysis =====\n")
@@ -293,16 +316,15 @@ def experiment2(device: str = "cuda:0"):
         for idx, row in df.iterrows():
             plt.text(idx, row[metric] + 0.01 * row[metric] if row[metric] != 0 else 0.01, f"{row[metric]:.1f}", ha="center", va="bottom", fontsize=8)
         plt.tight_layout()
-        fname_pdf = f".research/iteration2/images/{fname}_exp2.pdf"
-        Path(".research/iteration2/images").mkdir(parents=True, exist_ok=True)
+        fname_pdf = IMG_DIR / f"{fname}_exp2.pdf"
         plt.savefig(fname_pdf, bbox_inches="tight")
         plt.close()
         print(f"Figure saved: {fname_pdf}")
 
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Experiment 3 : Robustness & Scalability Stress-Test
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 def experiment3(device: str = "cuda:0"):
     print("\n===== EXPERIMENT 3 – Robustness & Scalability Stress-Test =====\n")
@@ -353,10 +375,9 @@ def experiment3(device: str = "cuda:0"):
     plt.ylabel("Latency (ms)")
     plt.tight_layout()
     plt.legend(title="Method")
-    Path(".research/iteration2/images").mkdir(parents=True, exist_ok=True)
-    plt.savefig(".research/iteration2/images/latency_vs_horizon.pdf", bbox_inches="tight")
+    plt.savefig(IMG_DIR / "latency_vs_horizon.pdf", bbox_inches="tight")
     plt.close()
-    print("Figure saved: .research/iteration2/images/latency_vs_horizon.pdf")
+    print(f"Figure saved: {IMG_DIR / 'latency_vs_horizon.pdf'}")
 
     # Executed windows box plot -----------------------------------------------------
     plt.figure(figsize=(6, 4))
@@ -364,9 +385,9 @@ def experiment3(device: str = "cuda:0"):
     plt.ylabel("# Executed sub-goal windows")
     plt.xlabel("Horizon")
     plt.tight_layout()
-    plt.savefig(".research/iteration2/images/executed_windows.pdf", bbox_inches="tight")
+    plt.savefig(IMG_DIR / "executed_windows.pdf", bbox_inches="tight")
     plt.close()
-    print("Figure saved: .research/iteration2/images/executed_windows.pdf")
+    print(f"Figure saved: {IMG_DIR / 'executed_windows.pdf'}")
 
     # ---------------- OOD mazes ----------------------------------------------------
     from maze_gen import prim_maze, MazeEnv  # assumes helper exists
@@ -410,6 +431,6 @@ def experiment3(device: str = "cuda:0"):
         plt.text(idx % 3, row["lat"] * 1.01 if row["lat"] != 0 else 0.01, f"{row['lat']:.0f}", ha="center", va="bottom", fontsize=7)
     plt.legend(title="Method")
     plt.tight_layout()
-    plt.savefig(".research/iteration2/images/latency_ood.pdf", bbox_inches="tight")
+    plt.savefig(IMG_DIR / "latency_ood.pdf", bbox_inches="tight")
     plt.close()
-    print("Figure saved: .research/iteration2/images/latency_ood.pdf")
+    print(f"Figure saved: {IMG_DIR / 'latency_ood.pdf'}")
