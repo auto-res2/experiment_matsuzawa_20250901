@@ -16,7 +16,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
-from torchvision.utils import save_image, make_grid
+from torchvision.utils import save_image, make_grid  # noqa: F401 – keep for parity with original code
 
 # -------------------------------------------------------------
 #  Simple CNN that roughly mimics an image-to-image network so
@@ -104,7 +104,10 @@ def run(cfg: Dict):
     plt.ylabel("MSE loss")
     plt.title("Training curve – TinyCNN")
     plt.tight_layout()
-    img_dir = Path(".research/iteration2/images")
+    # ------------------------------------------------------------------
+    #  All experiment images must live under .research/iteration3/images
+    # ------------------------------------------------------------------
+    img_dir = Path(".research/iteration3/images")
     img_dir.mkdir(parents=True, exist_ok=True)
     plt.savefig(img_dir / "training_loss.pdf", format="pdf", bbox_inches="tight")
     plt.close()

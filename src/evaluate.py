@@ -151,6 +151,12 @@ class DHACRunner:  # pylint: disable=too-many-instance-attributes
         self.exp_dir = Path("outputs") / datetime.now().strftime("%Y%m%d-%H%M%S")
         self.exp_dir.mkdir(parents=True, exist_ok=True)
 
+        # ------------------------------------------------------------------
+        # All experiment images should live under .research/iteration3/images
+        # ------------------------------------------------------------------
+        self.img_root = Path(".research/iteration3/images")
+        self.img_root.mkdir(parents=True, exist_ok=True)
+
     # ------------------------------------------------------------------
     #  EXP-1 – very small version (5 images per dataset) so that the test
     #  finishes in a few seconds even on CPU.
@@ -169,8 +175,8 @@ class DHACRunner:  # pylint: disable=too-many-instance-attributes
             real_path = root / "real_cache"
             real_path.mkdir(parents=True, exist_ok=True)
             model = load_model("baseline_64").eval()
-            fake_dir = self.exp_dir / f"{ds_name}_fake"
-            fake_dir.mkdir(exist_ok=True)
+            fake_dir = self.img_root / f"{ds_name}_fake"
+            fake_dir.mkdir(parents=True, exist_ok=True)
             with torch.no_grad():
                 samp = model.sample(bsz)
                 for i in range(bsz):

@@ -47,7 +47,7 @@ def main() -> None:  # noqa: D401
     rprint("[bold cyan]\n▶ Running evaluation / experiments…")
     _eval.run(args.exp, dataset_roots)
 
-    rprint("\n[bold green]Finished – artefacts are stored in ./outputs and ./.research/iteration2/images")
+    rprint("\n[bold green]Finished – artefacts are stored in ./outputs and ./.research/iteration3/images")
 
 
 # -----------------------------------------------------------------------------

@@ -11,5 +11,4 @@ scipy
 scikit-learn
 # The following are optional – the code falls back to stubs when absent.
 fvcore>=0.1.5
-cleanfid>=0.1.35
 pynvml>=11.5.0
