@@ -9,9 +9,13 @@ import seaborn as sns
 import torch
 from torch.cuda.amp import autocast
 
-# paths
-FIG_DIR = Path("figures")
-FIG_DIR.mkdir(exist_ok=True)
+# ------------------------------------------------------------------
+#  Save directory for all generated figures
+# ------------------------------------------------------------------
+# All images must be stored under .research/iteration8/images
+FIG_DIR = Path(".research/iteration8/images")
+# Ensure the directory hierarchy exists
+FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 # ------------------------------------------------------------------
 #  Accuracy utility

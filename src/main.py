@@ -46,7 +46,7 @@ Cross-Domain continual learning with *80 kB* total memory cap
     buf = HydraSketchBuffer(latent_dim=512, bitwidth=64, max_items=1000)
     dec = AdaptiveDecoder(64, 512, 4).to(DEVICE)
 
-    # Sanity-check memory budged (sketches + decoder params)
+    # Sanity-check memory budget (sketches + decoder params)
     assert buf.bytes_per_item * 1000 < 80 * 1024, "Sketches alone exceed 80 kB!"
 
     opt = torch.optim.SGD(model.parameters(), lr=0.1, momentum=0.9, weight_decay=5e-4)
@@ -170,7 +170,8 @@ Experiment-3 – Drift & Privacy (simplified demo)
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--exp", type=int, choices=[1, 2, 3], required=True)
+    # `--exp` is now optional (defaults to 1) to allow running without arguments
+    parser.add_argument("--exp", type=int, choices=[1, 2, 3], default=1)
     parser.add_argument("--subexp", choices=["vision", "nlp"], default="vision")
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
