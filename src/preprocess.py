@@ -1,61 +1,50 @@
-"""
-preprocess.py – data preparation
-Loads the iris data set via scikit-learn, splits it into train/val/test and
-stores the resulting tensors for fast re-use.  Also plots a simple pair plot
-(which can be useful for quick sanity checks).
+"""src/preprocess.py
+Very small data-generation & preprocessing helper so that the experiment is
+completely self-contained.  We synthesise a 20-dimensional binary
+classification dataset with scikit-learn and then store it as PyTorch tensors
+in RAM (no filesystem footprint necessary).
 """
 from __future__ import annotations
 
-from pathlib import Path
+from typing import Tuple
 
-import torch
 import numpy as np
-import pandas as pd
-import matplotlib
-matplotlib.use("Agg")
-import seaborn as sns
-import matplotlib.pyplot as plt
-from sklearn.datasets import load_iris
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
+import torch
+from sklearn.datasets import make_classification
 
-ROOT = Path(__file__).resolve().parent.parent
-DATA_DIR = ROOT / "data"
-DATA_DIR.mkdir(exist_ok=True)
-IMG_DIR = ROOT / ".research" / "iteration11" / "images"
-IMG_DIR.mkdir(parents=True, exist_ok=True)
+# -----------------------------------------------------------------------------
+#  Public helper – called by train.py / evaluate.py
+# -----------------------------------------------------------------------------
 
+def load_preprocessed_data(cfg: dict) -> Tuple[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
+    """Generate (or regenerate) a deterministic synthetic dataset.
 
-def preprocess() -> None:
-    """Pre-process the Iris data set and save it as tensors."""
-    iris = load_iris()
-    X = iris.data.astype(np.float32)
-    y = iris.target.astype(np.int64)
+    The function keeps the seed fixed so that different stages of the pipeline
+    see exactly the same data splits.
+    """
+    rng = np.random.default_rng(cfg.get("data_seed", 0))
 
-    # standardise features
-    scaler = StandardScaler()
-    X = scaler.fit_transform(X).astype(np.float32)
+    x, y = make_classification(
+        n_samples=cfg["dataset_size"],
+        n_features=20,
+        n_informative=15,
+        n_redundant=5,
+        n_classes=2,
+        random_state=rng.integers(0, 10_000),
+    )
 
-    # split – 60 % train, 20 % val, 20 % test
-    x_train, x_tmp, y_train, y_tmp = train_test_split(X, y, test_size=0.4, random_state=0, stratify=y)
-    x_val, x_test, y_val, y_test = train_test_split(x_tmp, y_tmp, test_size=0.5, random_state=0, stratify=y_tmp)
+    # Normalise to zero-mean, unit-variance (common practice)
+    x = (x - x.mean(axis=0, keepdims=True)) / (x.std(axis=0, keepdims=True) + 1e-8)
 
-    tensors = {
-        "x_train": torch.from_numpy(x_train),
-        "y_train": torch.from_numpy(y_train),
-        "x_val": torch.from_numpy(x_val),
-        "y_val": torch.from_numpy(y_val),
-        "x_test": torch.from_numpy(x_test),
-        "y_test": torch.from_numpy(y_test),
-    }
-    torch.save(tensors, DATA_DIR / "dataset.pt")
-    print(f"Pre-processed data saved → {(DATA_DIR / 'dataset.pt').relative_to(ROOT)}")
+    # Train/val split ----------------------------------------------------------
+    n_train = int(cfg["train_split"] * len(x))
+    x_train, y_train = x[:n_train], y[:n_train]
+    x_val,   y_val   = x[n_train:], y[n_train:]
 
-    # quick pair-plot – useful for inspection
-    df = pd.DataFrame(X, columns=iris.feature_names)
-    df["species"] = pd.Categorical.from_codes(y, iris.target_names)
-    sns.pairplot(df, hue="species", corner=True)
-    plt.tight_layout()
-    fig_path = IMG_DIR / "iris_pairplot.pdf"
-    plt.savefig(fig_path)
-    print(f"Pair plot saved → {fig_path.relative_to(ROOT)}")
+    # Cast to torch tensors ----------------------------------------------------
+    x_train = torch.as_tensor(x_train, dtype=torch.float32)
+    y_train = torch.as_tensor(y_train, dtype=torch.long)
+    x_val   = torch.as_tensor(x_val,   dtype=torch.float32)
+    y_val   = torch.as_tensor(y_val,   dtype=torch.long)
+
+    return (x_train, y_train), (x_val, y_val)
