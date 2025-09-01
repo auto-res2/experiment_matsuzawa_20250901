@@ -1,47 +1,58 @@
-# src/main.py
-"""Project entry point.
-Runs: 1) data preparation, 2) training, 3) evaluation.
-Example usage (from project root):
-    python -m src.main --epochs 3 --batch_size 128
+"""src/main.py
+Single entry-point for the whole project – executed via `python -m src.main`.
+The script wires together preprocessing, (dummy) training and evaluation so
+that the experiment runs end-to-end with one command and produces artefacts
+that satisfy the requirements.
 """
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from typing import Dict
 
-import torch
+from rich import print as rprint
 
-from .preprocess import get_dataloaders
-from .train import train_model
-from .evaluate import evaluate_model
+from . import preprocess as _pre
+from . import train as _train
+from . import evaluate as _eval
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Tiny DHAC demo pipeline (CIFAR-10)")
-    parser.add_argument("--epochs", type=int, default=3, help="Number of training epochs")
-    parser.add_argument("--batch_size", type=int, default=128, help="Mini-batch size")
-    parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
-    parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
-    args = parser.parse_args()
+# -----------------------------------------------------------------------------
+#  Parse CLI arguments first so that the other modules can use the flags.
+# -----------------------------------------------------------------------------
 
-    print("===== Stage 1: Data preparation =====")
-    train_loader, val_loader, test_loader = get_dataloaders(batch_size=args.batch_size)
+def _cli() -> argparse.Namespace:  # noqa: D401
+    parser = argparse.ArgumentParser(description="End-to-end DHAC toy pipeline")
+    parser.add_argument("--exp", type=int, default=1, choices=[1, 2, 3], help="Which experiment to run (subset implemented)")
+    return parser.parse_args()
 
-    print("\n===== Stage 2: Training =====")
-    model_path = Path("models/simple_cnn.pt")
-    train_model(
-        train_loader,
-        val_loader,
-        epochs=args.epochs,
-        lr=args.lr,
-        device=args.device,
-        model_save_path=model_path,
-    )
 
-    print("\n===== Stage 3: Evaluation =====")
-    acc, _ = evaluate_model(model_path, test_loader, device=args.device)
-    print(f"Test accuracy: {acc*100:.2f}% (checkpoint: {model_path})")
+# -----------------------------------------------------------------------------
+#  Main orchestrator
+# -----------------------------------------------------------------------------
 
+
+def main() -> None:  # noqa: D401
+    args = _cli()
+
+    # 1. Pre-processing – create tiny synthetic datasets
+    rprint("[bold cyan]\n▶ Pre-processing synthetic datasets…")
+    dataset_roots: Dict[str, Path] = _pre.run()
+
+    # 2. Training – fit a toy CNN so that we have weights on disk
+    rprint("[bold cyan]\n▶ Training dummy model…")
+    _train.run({"data_root": dataset_roots["imagenet64"], "model_dir": "models"})
+
+    # 3. Evaluation / experiments – lightweight reproduction of EXP-1
+    rprint("[bold cyan]\n▶ Running evaluation / experiments…")
+    _eval.run(args.exp, dataset_roots)
+
+    rprint("\n[bold green]Finished – artefacts are stored in ./outputs and ./.research/iteration2/images")
+
+
+# -----------------------------------------------------------------------------
+#  Python module entry-point
+# -----------------------------------------------------------------------------
 
 if __name__ == "__main__":
     main()

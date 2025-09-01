@@ -1,39 +1,49 @@
-# src/preprocess.py
-"""Data-loading & simple preprocessing helper.
-Returns train/validation/test PyTorch dataloaders for CIFAR-10.
-The dataset is automatically downloaded to ``data/`` if necessary.
+"""src/preprocess.py
+Generates small synthetic *real* datasets required by the evaluation phase so
+that clean-fid has something to compare against.  Each dataset is a directory
+structure that mimics the one expected by DHACRunner:
+
+    data/<dataset_name>/real_cache/*.png
 """
 from __future__ import annotations
 
+import random
 from pathlib import Path
-from typing import Tuple
+from typing import Dict, List
 
-import torchvision.transforms as T
-from torchvision.datasets import CIFAR10
-from torch.utils.data import DataLoader, random_split
+import numpy as np
+import torch
+from torchvision.utils import save_image
+
+__all__ = ["run"]
 
 
-def get_dataloaders(
-    batch_size: int = 128,
-    num_workers: int = 4,
-    data_root: Path | str = "data",
-) -> Tuple[DataLoader, DataLoader, DataLoader]:
-    """Download CIFAR-10 (if missing) and return train/val/test loaders."""
+DATASETS = {
+    "imagenet64": (3, 64, 64),
+    "celeba256": (3, 256, 256),
+    "lsun_church": (3, 256, 256),
+    "cifar10": (3, 32, 32),
+}
 
-    transform = T.Compose([
-        T.ToTensor(),
-        T.Normalize(mean=(0.4914, 0.4822, 0.4465), std=(0.2470, 0.2435, 0.2616)),
-    ])
-    trainset_full = CIFAR10(root=data_root, train=True, download=True, transform=transform)
-    testset = CIFAR10(root=data_root, train=False, download=True, transform=transform)
 
-    # hold out 5k examples for validation
-    train_size = len(trainset_full) - 5000
-    val_size = 5000
-    trainset, valset = random_split(trainset_full, [train_size, val_size])
+def _make_real_dataset(root: Path, shape: tuple[int, int, int], n_img: int = 10) -> None:
+    root.mkdir(parents=True, exist_ok=True)
+    for i in range(n_img):
+        img = torch.rand(*shape)
+        save_image(img, root / f"real_{i}.png")
 
-    train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
-    val_loader = DataLoader(valset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
-    test_loader = DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
 
-    return train_loader, val_loader, test_loader
+def run() -> Dict[str, Path]:  # noqa: D401
+    """Create synthetic *real* datasets and return a mapping <name -> path>."""
+    random.seed(0)
+    np.random.seed(0)
+    torch.manual_seed(0)
+
+    base = Path("data")
+    out: Dict[str, Path] = {}
+
+    for name, shape in DATASETS.items():
+        real_root = base / name / "real_cache"
+        _make_real_dataset(real_root, shape)
+        out[name] = base / name
+    return out

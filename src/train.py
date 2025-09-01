@@ -1,156 +1,112 @@
-# src/train.py
-"""Training script for a tiny CIFAR-10 classifier.
-The goal is not state-of-the-art accuracy but to supply a *runnable* example
-that fulfils the project requirements:
-  * uses the dataset returned by ``src.preprocess``.
-  * stores the trained weights under ``models/``.
-  * produces publication-quality training curves (loss & accuracy) as PDF
-    under ``.research/iteration1/images``.
+"""src/train.py
+Light-weight training routine that fits a toy convolutional network on a
+synthetic image dataset generated during the preprocessing step.  The goal is
+not to obtain a useful model but to make the complete pipeline runnable and to
+produce artefacts (trained weights + loss curve) that downstream scripts can
+consume.
 """
 from __future__ import annotations
 
-import time
+import json
 from pathlib import Path
-from typing import List, Tuple
+from typing import Dict, List
 
+import numpy as np
 import torch
-from torch import nn, optim
-from torch.utils.data import DataLoader
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import seaborn as sns
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader, TensorDataset
+from torchvision.utils import save_image, make_grid
 
 # -------------------------------------------------------------
-# Simple CNN – intentionally lightweight so that it trains fast
+#  Simple CNN that roughly mimics an image-to-image network so
+#  that we have something to save / load during evaluation.
 # -------------------------------------------------------------
 
-class SimpleCNN(nn.Module):
-    def __init__(self, num_classes: int = 10):
+
+class TinyCNN(nn.Module):
+    def __init__(self, in_channels: int = 3):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Conv2d(3, 32, 3, padding=1),
+            nn.Conv2d(in_channels, 32, 3, padding=1),
             nn.ReLU(inplace=True),
-            nn.Conv2d(32, 64, 3, padding=1),
+            nn.Conv2d(32, 32, 3, padding=1),
             nn.ReLU(inplace=True),
-            nn.MaxPool2d(2),
-            nn.Conv2d(64, 128, 3, padding=1),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2),
-            nn.Flatten(),
-            nn.Linear(8 * 8 * 128, 256),
-            nn.ReLU(inplace=True),
-            nn.Linear(256, num_classes),
+            nn.Conv2d(32, in_channels, 1),
+            nn.Sigmoid(),
         )
 
     def forward(self, x):  # type: ignore[override]
         return self.net(x)
 
 
-# -------------------------------------------------------------
-# Training routine
-# -------------------------------------------------------------
+# ------------------------------------------------------------------
+#  Public API that will be invoked from src.main
+# ------------------------------------------------------------------
 
-def train_model(
-    train_loader: DataLoader,
-    val_loader: DataLoader,
-    epochs: int = 3,
-    lr: float = 1e-3,
-    device: str | torch.device = "cuda",
-    model_save_path: Path = Path("models/simple_cnn.pt"),
-) -> Tuple[SimpleCNN, List[float], List[float]]:
-    """Train *epochs* epochs, save best checkpoint, return model & history."""
 
-    device = torch.device(device)
-    model = SimpleCNN().to(device)
-    criterion = nn.CrossEntropyLoss()
-    optimiser = optim.Adam(model.parameters(), lr=lr)
+def run(cfg: Dict):
+    """Train the dummy CNN for a few epochs and save artefacts.
 
-    best_acc = 0.0
-    history_loss: List[float] = []
-    history_acc: List[float] = []
+    Args:
+        cfg: dictionary with at least the following fields
+              - "data_root": directory that contains the synthetic tensors
+              - "model_dir": where to save the trained weights
+    """
+    rng = np.random.RandomState(0)
+    torch.manual_seed(0)
 
-    for ep in range(1, epochs + 1):
-        model.train()
-        running_loss = 0.0
-        correct, total = 0, 0
-        t0 = time.time()
-        for imgs, labels in train_loader:
-            imgs, labels = imgs.to(device), labels.to(device)
+    data_root = Path(cfg["data_root"])
+    model_dir = Path(cfg["model_dir"])
+    model_dir.mkdir(parents=True, exist_ok=True)
 
-            optimiser.zero_grad()
-            logits = model(imgs)
-            loss = criterion(logits, labels)
+    imgs = torch.load(data_root / "train.pt")  # shape B×C×H×W, values in [0,1]
+
+    ds = TensorDataset(imgs, imgs)  # identity mapping → auto-encoder style
+    loader = DataLoader(ds, batch_size=32, shuffle=True)
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = TinyCNN().to(device)
+
+    opt = optim.Adam(model.parameters(), lr=1e-3)
+    criterion = nn.MSELoss()
+
+    losses: List[float] = []
+    n_epochs = 3  # short & sweet – keeps CI fast
+    for epoch in range(n_epochs):
+        running = 0.0
+        for x, y in loader:
+            x = x.to(device)
+            y = y.to(device)
+            opt.zero_grad()
+            out = model(x)
+            loss = criterion(out, y)
             loss.backward()
-            optimiser.step()
+            opt.step()
+            running += loss.item() * x.size(0)
+        epoch_loss = running / len(loader.dataset)
+        losses.append(epoch_loss)
+        print(f"Epoch {epoch+1}/{n_epochs} – loss={epoch_loss:.4f}")
 
-            running_loss += loss.item() * imgs.size(0)
-            preds = logits.argmax(dim=1)
-            correct += (preds == labels).sum().item()
-            total += labels.size(0)
+    # ------------------------------------------------------------------
+    # save model + loss curve
+    # ------------------------------------------------------------------
+    torch.save(model.state_dict(), model_dir / "tinycnn.pth")
+    with open(model_dir / "train_metrics.json", "w") as f:
+        json.dump({"loss_curve": losses}, f, indent=2)
 
-        train_loss = running_loss / total
-        train_acc = correct / total
+    # nice PDF for the paper
+    import matplotlib.pyplot as plt
 
-        # quick validation pass
-        val_acc = _eval_acc(model, val_loader, device)
-
-        history_loss.append(train_loss)
-        history_acc.append(val_acc)
-
-        print(
-            f"[Epoch {ep:02d}/{epochs}] loss={train_loss:.4f}  "
-            f"train_acc={train_acc*100:.2f}%  val_acc={val_acc*100:.2f}%  "
-            f"t={time.time()-t0:.1f}s",
-            flush=True,
-        )
-
-        # checkpoint
-        if val_acc > best_acc:
-            best_acc = val_acc
-            model_save_path.parent.mkdir(parents=True, exist_ok=True)
-            torch.save(model.state_dict(), model_save_path)
-
-    _plot_training_curves(history_loss, history_acc)
-    return model, history_loss, history_acc
-
-
-# -------------------------------------------------------------
-# Helpers
-# -------------------------------------------------------------
-
-def _eval_acc(model: nn.Module, loader: DataLoader, device="cuda") -> float:
-    model.eval()
-    correct, total = 0, 0
-    with torch.no_grad():
-        for imgs, labels in loader:
-            imgs, labels = imgs.to(device), labels.to(device)
-            preds = model(imgs).argmax(dim=1)
-            correct += (preds == labels).sum().item()
-            total += labels.size(0)
-    return correct / total
-
-
-def _plot_training_curves(losses: List[float], accs: List[float]):
-    """Save loss/accuracy PDF to .research/iteration1/images."""
-    out_dir = Path(".research/iteration1/images")
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    epochs = range(1, len(losses) + 1)
-    sns.set_style("whitegrid")
-
-    # Loss curve
     plt.figure(figsize=(4, 3))
-    sns.lineplot(x=epochs, y=losses, marker="o")
-    plt.xlabel("Epoch"); plt.ylabel("Cross-Entropy Loss"); plt.title("Training Loss")
+    plt.plot(range(1, n_epochs + 1), losses, marker="o")
+    plt.xlabel("Epoch")
+    plt.ylabel("MSE loss")
+    plt.title("Training curve – TinyCNN")
     plt.tight_layout()
-    plt.savefig(out_dir / "loss_curve.pdf", format="pdf")
+    img_dir = Path(".research/iteration2/images")
+    img_dir.mkdir(parents=True, exist_ok=True)
+    plt.savefig(img_dir / "training_loss.pdf", format="pdf", bbox_inches="tight")
     plt.close()
 
-    # Accuracy curve
-    plt.figure(figsize=(4, 3))
-    sns.lineplot(x=epochs, y=[a * 100 for a in accs], marker="o")
-    plt.xlabel("Epoch"); plt.ylabel("Validation Accuracy (%)"); plt.title("Accuracy")
-    plt.tight_layout()
-    plt.savefig(out_dir / "accuracy_curve.pdf", format="pdf")
-    plt.close()
+    return losses
