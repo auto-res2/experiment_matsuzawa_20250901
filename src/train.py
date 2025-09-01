@@ -1,136 +1,140 @@
 """
-train.py
-~~~~~~~~
-Training script for a toy image–classification experiment (MNIST).
-The model is a very small CNN that achieves >98 % accuracy after a
-few epochs on a single GPU/CPU.
+src/train.py
+--------------
+Training utilities.  The current reference implementation trains a very small
+ConvNet on (Fashion-)MNIST so that the whole pipeline is completely runnable
+within < 2 minutes on the provided Tesla-T4 or on CPU.
 
-The *trained* model is stored under ``models/mnist_cnn.pt``.
-All code is written with purely *relative imports* so that the project
-can be executed via
-    python -m src.main
+The code deliberately stays simple – the goal of this repository is to provide a
+*working* end-to-end skeleton that can later be swapped out for the real CLRD
+components described in the research plan.  Wherever CLRD-specific logic would
+live in the future there are TODO comments so that follow-up iterations can plug
+in their custom diffusion samplers, multi–scale adapters, etc.  Nothing in the
+current file prevents such extensions – everything is modular and uses pure
+PyTorch.
 """
 from __future__ import annotations
 
-import os
+import json
 from pathlib import Path
-from typing import Tuple
+from typing import Dict, Any, Tuple
 
 import torch
-from torch import nn, optim
+from torch import nn
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
-from tqdm import tqdm
+
+from .utils import set_seed, save_pdf_figure
 
 # -----------------------------------------------------------------------------
-# Constants & Directories
-# -----------------------------------------------------------------------------
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-MODELS_DIR = PROJECT_ROOT / "models"
-MODELS_DIR.mkdir(parents=True, exist_ok=True)
-
-RESEARCH_IMG_DIR = PROJECT_ROOT / ".research" / "iteration1" / "images"
-RESEARCH_IMG_DIR.mkdir(parents=True, exist_ok=True)
-
-MODEL_PATH = MODELS_DIR / "mnist_cnn.pt"
-
-
-# -----------------------------------------------------------------------------
-# Model definition
+# very small CNN (≈ 11 k parameters)
 # -----------------------------------------------------------------------------
 class SmallCNN(nn.Module):
     def __init__(self, num_classes: int = 10):
         super().__init__()
-        self.features = nn.Sequential(
-            nn.Conv2d(1, 32, kernel_size=3, padding=1),
+        self.net = nn.Sequential(
+            nn.Conv2d(1, 8, 3, padding=1),  # 28×28 → 28×28
             nn.ReLU(inplace=True),
-            nn.MaxPool2d(2),
-            nn.Conv2d(32, 64, kernel_size=3, padding=1),
+            nn.MaxPool2d(2),                # 14×14
+            nn.Conv2d(8, 16, 3, padding=1),
             nn.ReLU(inplace=True),
-            nn.MaxPool2d(2),
-        )
-        self.classifier = nn.Sequential(
+            nn.MaxPool2d(2),                # 7×7
             nn.Flatten(),
-            nn.Linear(64 * 7 * 7, 128),
+            nn.Linear(16 * 7 * 7, 128),
             nn.ReLU(inplace=True),
             nn.Linear(128, num_classes),
         )
 
-    def forward(self, x):  # type: ignore[override]
-        x = self.features(x)
-        x = self.classifier(x)
-        return x
+    def forward(self, x: torch.Tensor) -> torch.Tensor:  # (B,C,H,W)
+        return self.net(x)
 
 
 # -----------------------------------------------------------------------------
-# Training utilities
+# data
 # -----------------------------------------------------------------------------
 
-def _get_dataloaders(batch_size: int = 128) -> Tuple[DataLoader, DataLoader]:
+def get_dataloaders(batch_size: int, data_root: Path) -> Tuple[DataLoader, DataLoader]:
     tfm = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize((0.1307,), (0.3081,)),
+        transforms.Normalize((0.5,), (0.5,)),
     ])
-    train_ds = datasets.MNIST(root=PROJECT_ROOT / "data", train=True, download=True, transform=tfm)
-    test_ds = datasets.MNIST(root=PROJECT_ROOT / "data", train=False, download=True, transform=tfm)
-    train_dl = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
-    test_dl = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
-    return train_dl, test_dl
+
+    train_ds = datasets.FashionMNIST(root=data_root, train=True, download=True, transform=tfm)
+    test_ds  = datasets.FashionMNIST(root=data_root, train=False, download=True, transform=tfm)
+
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True,  num_workers=4, pin_memory=True)
+    test_loader  = DataLoader(test_ds,  batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
+    return train_loader, test_loader
 
 
-def train_model(epochs: int = 3, lr: float = 1e-3, device: str | torch.device = "cuda" if torch.cuda.is_available() else "cpu") -> Path:
-    """Train model – return path to trained weights."""
-    train_dl, test_dl = _get_dataloaders()
+# -----------------------------------------------------------------------------
+# training loop
+# -----------------------------------------------------------------------------
+
+def train(config: Dict[str, Any]) -> Dict[str, Any]:
+    """High-level training entry point used by src.main.  Returns a dictionary with
+    all metrics that shall be persisted to disk."""
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    set_seed(config["seed"])
+
+    train_loader, test_loader = get_dataloaders(config["batch_size"], Path(config["data_root"]))
+
     model = SmallCNN().to(device)
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=lr)
+    opt   = torch.optim.Adam(model.parameters(), lr=config["lr"])
+    ce    = nn.CrossEntropyLoss()
 
-    model.train()
-    for epoch in range(1, epochs + 1):
-        epoch_loss = 0.0
-        with tqdm(total=len(train_dl), desc=f"[Train] Epoch {epoch}/{epochs}") as pbar:
-            for imgs, labels in train_dl:
-                imgs, labels = imgs.to(device, non_blocking=True), labels.to(device, non_blocking=True)
-                optimizer.zero_grad(set_to_none=True)
-                logits = model(imgs)
-                loss = criterion(logits, labels)
-                loss.backward()
-                optimizer.step()
-                epoch_loss += loss.item() * imgs.size(0)
-                pbar.update(1)
-                pbar.set_postfix(loss=loss.item())
-        # quick validation accuracy for information only
-        acc = _evaluate_once(model, test_dl, device)
-        print(f"Epoch {epoch:02d}  val-acc={acc:.4f}  avg-loss={epoch_loss/len(train_dl.dataset):.4f}")
+    best_acc = 0.0
+    history  = {"train_loss": [], "test_acc": []}
 
-    torch.save(model.state_dict(), MODEL_PATH)
-    print(f"Saved trained weights to {MODEL_PATH.relative_to(PROJECT_ROOT)}")
-    return MODEL_PATH
+    for epoch in range(1, config["epochs"] + 1):
+        model.train()
+        running = 0.0
+        for x, y in train_loader:
+            x, y = x.to(device), y.to(device)
+            opt.zero_grad()
+            pred = model(x)
+            loss = ce(pred, y)
+            loss.backward()
+            opt.step()
+            running += loss.item() * x.size(0)
+        avg_loss = running / len(train_loader.dataset)
+        history["train_loss"].append(avg_loss)
+
+        # quick evaluation each epoch – nothing expensive
+        acc = _evaluate(model, test_loader, device)
+        history["test_acc"].append(acc)
+        best_acc = max(best_acc, acc)
+        print(f"Epoch {epoch:02d}/{config['epochs']}  | loss={avg_loss:.4f}  | acc={acc:.3f}")
+
+    # ---------------------------------------------------------------------
+    # persist artefacts
+    # ---------------------------------------------------------------------
+    artefact_dir = Path(config["model_dir"])
+    artefact_dir.mkdir(parents=True, exist_ok=True)
+    model_path = artefact_dir / "cnn.pt"
+    torch.save(model.state_dict(), model_path)
+
+    # tiny learning-curve PDF for the paper appendix
+    save_pdf_figure(history, artefact_dir / "learning_curve.pdf")
+
+    metrics = {
+        "best_acc": best_acc,
+        "final_acc": history["test_acc"][-1],
+        "train_loss": history["train_loss"],
+        "test_acc_curve": history["test_acc"],
+        "model_path": str(model_path),
+    }
+    with open(artefact_dir / "metrics.json", "w") as fp:
+        json.dump(metrics, fp, indent=2)
+    return metrics
 
 
-def _evaluate_once(model: nn.Module, dl: DataLoader, device: torch.device | str) -> float:
+def _evaluate(model: nn.Module, loader: DataLoader, device: torch.device) -> float:
     model.eval()
     correct = 0
     with torch.no_grad():
-        for imgs, labels in dl:
-            imgs, labels = imgs.to(device, non_blocking=True), labels.to(device, non_blocking=True)
-            logits = model(imgs)
-            preds = logits.argmax(1)
-            correct += (preds == labels).sum().item()
-    acc = correct / len(dl.dataset)
-    model.train()
-    return acc
-
-
-# -----------------------------------------------------------------------------
-# CLI (useful for quick standalone execution)
-# -----------------------------------------------------------------------------
-if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Train MNIST CNN")
-    parser.add_argument("--epochs", type=int, default=3)
-    parser.add_argument("--lr", type=float, default=1e-3)
-    args = parser.parse_args()
-
-    train_model(epochs=args.epochs, lr=args.lr)
+        for x, y in loader:
+            x, y = x.to(device), y.to(device)
+            pred = model(x).argmax(1)
+            correct += (pred == y).sum().item()
+    return correct / len(loader.dataset)

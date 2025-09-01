@@ -1,76 +1,83 @@
 """
-main.py
-~~~~~~~
-Experiment driver that wires the *preprocess*, *train*, and *evaluate*
-modules together.  All stdout logging is *detailed* so that a researcher
-can follow the full experimental trace when calling
+src/main.py
+-----------
+Entry-point for the whole experiment suite.  It wires together the preprocessing
+step, the training routine and the evaluation so that a single command
 
     python -m src.main
+
+runs everything end-to-end and prints a concise report to stdout.
 """
 from __future__ import annotations
 
 import argparse
 import json
 from pathlib import Path
-import time
-import uuid
+from typing import Dict, Any
+
+from rich import print as rprint
+from rich.table import Table
 
 from . import preprocess, train, evaluate
-from .train import PROJECT_ROOT
+from .utils import set_seed
 
 
-# -----------------------------------------------------------------------------
-# Helper for rich console printing (no extra dependency if unavailable)
-# -----------------------------------------------------------------------------
-try:
-    from rich import print as rprint
-except ImportError:  # pragma: no cover – fallback if rich not installed
-    def rprint(*args, **kwargs):  # type: ignore[override]
-        print(*args, **kwargs)
+DEFAULT_CONFIG: Dict[str, Any] = {
+    "seed": 42,
+    "epochs": 3,            # keep tiny for demonstration purposes
+    "batch_size": 128,
+    "lr": 1e-3,
+    "data_root": "data/raw",
+    "model_dir": "models",
+}
 
 
-def _save_metadata(cfg: dict) -> None:
-    meta = {
-        "run_id": cfg["run_id"],
-        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "config": cfg,
-    }
-    out_dir = PROJECT_ROOT / "runs"
-    out_dir.mkdir(exist_ok=True, parents=True)
-    path = out_dir / f"summary_{cfg['run_id']}.json"
-    with open(path, "w") as f:
-        json.dump(meta, f, indent=2)
-    rprint(f"[bold green]Saved run-metadata to[/] {path.relative_to(PROJECT_ROOT)}")
+def pretty_table(title: str, rows: Dict[str, Any]):
+    tbl = Table(title=title, show_header=True, header_style="bold cyan")
+    tbl.add_column("Key", style="bold")
+    tbl.add_column("Value")
+    for k, v in rows.items():
+        tbl.add_row(str(k), str(v))
+    rprint(tbl)
 
 
-# -----------------------------------------------------------------------------
-# CLI
-# -----------------------------------------------------------------------------
+def run(cfg: Dict[str, Any]):
+    # ------------------------------------------------------------------
+    # 1. preprocessing (no-op for now)
+    # ------------------------------------------------------------------
+    preprocess.prepare_data(cfg["data_root"])
 
-def main() -> None:  # pylint: disable=too-many-statements
-    parser = argparse.ArgumentParser(description="End-to-end MNIST experiment")
-    parser.add_argument("--epochs", type=int, default=3, help="number of training epochs")
-    parser.add_argument("--lr", type=float, default=1e-3, help="learning rate")
-    args = parser.parse_args()
+    # ------------------------------------------------------------------
+    # 2. training
+    # ------------------------------------------------------------------
+    rprint("[yellow]Starting training …")
+    metrics = train.train(cfg)
 
-    cfg: dict = {
-        "epochs": args.epochs,
-        "lr": args.lr,
-        "run_id": uuid.uuid4().hex[:8],
-    }
+    # ------------------------------------------------------------------
+    # 3. evaluation (double-check that loading works)
+    # ------------------------------------------------------------------
+    acc = evaluate.evaluate(Path(metrics["model_path"]))
+    metrics["eval_reloaded_acc"] = acc
 
-    rprint("[bold cyan]Step 1/3:[/] Pre-processing dataset …")
-    preprocess.prepare_datasets()
+    # ------------------------------------------------------------------
+    # 4. persist & pretty-print summary
+    # ------------------------------------------------------------------
+    summary_path = Path(cfg["model_dir"]) / "summary.json"
+    with open(summary_path, "w") as fp:
+        json.dump(metrics, fp, indent=2)
 
-    rprint("[bold cyan]Step 2/3:[/] Training model …")
-    train.train_model(epochs=cfg["epochs"], lr=cfg["lr"])
-
-    rprint("[bold cyan]Step 3/3:[/] Evaluating model …")
-    metrics = evaluate.evaluate_model()
-    rprint(f"[bold magenta]Final test accuracy = {metrics['accuracy']:.4f}")
-
-    _save_metadata(cfg | metrics)
+    pretty_table("Experiment Summary", metrics)
+    rprint(f"[green]Summary written to {summary_path.relative_to(Path.cwd())}")
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Minimal CLRD placeholder experiment")
+    parser.add_argument("--config", type=str, help="Path to custom JSON config", default=None)
+    args = parser.parse_args()
+
+    cfg = DEFAULT_CONFIG.copy()
+    if args.config is not None:
+        with open(args.config) as fp:
+            cfg.update(json.load(fp))
+    set_seed(cfg["seed"])
+    run(cfg)

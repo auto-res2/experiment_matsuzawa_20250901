@@ -1,0 +1,10 @@
+# config/experiment.yaml
+# ----------------------
+# Example override file that can be passed via
+#    python -m src.main --config config/experiment.yaml
+seed: 17
+epochs: 5
+batch_size: 64
+lr: 0.0005
+data_root: data/raw
+model_dir: models
