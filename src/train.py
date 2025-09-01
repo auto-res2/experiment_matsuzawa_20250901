@@ -17,6 +17,8 @@ PyTorch.
 from __future__ import annotations
 
 import json
+import sys
+import types
 from pathlib import Path
 from typing import Dict, Any, Tuple
 
@@ -25,7 +27,67 @@ from torch import nn
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
-from .utils import set_seed, save_pdf_figure
+# -----------------------------------------------------------------------------
+# utils – ensure availability even if the dedicated module is missing
+# -----------------------------------------------------------------------------
+try:
+    from .utils import set_seed, save_pdf_figure  # type: ignore
+except ModuleNotFoundError:
+    # Provide minimal fallback implementations and register a pseudo-module so
+    # that `import src.utils` works for all subsequently imported modules.
+    import random
+    import numpy as np
+    from pathlib import Path
+
+    import matplotlib
+
+    matplotlib.use("Agg")  # headless backend
+    import matplotlib.pyplot as plt  # noqa: E402
+
+    def set_seed(seed: int) -> None:  # noqa: D401
+        """Set RNG seeds for reproducibility across Python, NumPy and PyTorch."""
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True  # type: ignore[attr-defined]
+        torch.backends.cudnn.benchmark = False  # type: ignore[attr-defined]
+
+    def save_pdf_figure(history: Dict[str, list], path: Path) -> None:
+        """Save a simple two-axis learning-curve PDF and additionally copy it to
+        the central images directory required by the evaluation harness.
+        """
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        fig, ax1 = plt.subplots(figsize=(6, 4))
+        ax1.plot(history["train_loss"], label="train_loss", color="tab:blue")
+        ax1.set_xlabel("Epoch")
+        ax1.set_ylabel("Loss", color="tab:blue")
+
+        ax2 = ax1.twinx()
+        ax2.plot(history["test_acc"], label="test_acc", color="tab:orange")
+        ax2.set_ylabel("Accuracy", color="tab:orange")
+
+        # combine legends from both axes
+        lines, labels = ax1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax1.legend(lines + lines2, labels + labels2, loc="best")
+
+        fig.tight_layout()
+        fig.savefig(path, format="pdf")
+
+        # Always store a copy in the central research directory so that the
+        # assessment tooling can easily locate all figures.
+        central_dir = Path(".research/iteration7/images")
+        central_dir.mkdir(parents=True, exist_ok=True)
+        fig.savefig(central_dir / path.name, format="pdf")
+        plt.close(fig)
+
+    _utils_mod = types.ModuleType("src.utils")
+    _utils_mod.set_seed = set_seed  # type: ignore[attr-defined]
+    _utils_mod.save_pdf_figure = save_pdf_figure  # type: ignore[attr-defined]
+    sys.modules["src.utils"] = _utils_mod
 
 # -----------------------------------------------------------------------------
 # very small CNN (≈ 11 k parameters)
