@@ -1,5 +1,6 @@
-torch>=2.0
-torchvision>=0.15
-matplotlib>=3.7
-PyYAML>=6.0
-numpy>=1.23
+torch>=2.0.0
+numpy
+matplotlib
+seaborn
+pyyaml
+gymnasium

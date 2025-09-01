@@ -1,24 +1,16 @@
 """src/preprocess.py
---------------------
-Download and prepare the MNIST dataset used by the experiment.  The function
-`prepare_datasets` returns the training- and test-sets so that the rest of the
-code does not need to touch the on-disk representation.
-
-All data are stored inside the project in the directory `data/` as required by
-the specification.
+For this simple RL experiment preprocessing is minimal –
+we just create the environment and set seeds.
 """
 from __future__ import annotations
-from pathlib import Path
-from typing import Tuple
 
-from torchvision.datasets import MNIST
-from torchvision import transforms
+from typing import Dict
+import gymnasium as gym
+
+from .train import set_seed
 
 
-def prepare_datasets(data_root: Path) -> Tuple[MNIST, MNIST]:
-    """Download (if necessary) and return (train_ds, test_ds)."""
-    data_root.mkdir(exist_ok=True)
-    tfm = transforms.ToTensor()
-    train_ds = MNIST(data_root, download=True, train=True, transform=tfm)
-    test_ds = MNIST(data_root, download=True, train=False, transform=tfm)
-    return train_ds, test_ds
+def make_env(cfg: Dict) -> gym.Env:
+    set_seed(cfg.get("seed", None))
+    env = gym.make(cfg["env_name"])
+    return env

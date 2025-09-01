@@ -1,105 +1,95 @@
 """src/train.py
------------------
-Contains the training loop used by `src.main`.  The trainer is deliberately
-kept very small so that the whole project can be executed on a single GPU/CPU
-within the evaluation time-limit while still demonstrating the full pipeline
-(pre-processing → training → evaluation → visualisation).
-
-The example trains a simple two-layer MLP on the MNIST classification task
-(downloaded automatically by `src.preprocess`).  All parameters such as the
-number of epochs, learning-rate, etc. are provided by the `config.yaml` file
-loaded in `src.main`.
+Train module: implements a very small REINFORCE agent for CartPole-v1.
+The function `train` is the public entry-point used by src.main.
+All heavy lifting (optimisation, logging, checkpointing) happens here.
 """
 from __future__ import annotations
-import json
+
+import time
 from pathlib import Path
 from typing import Dict, List, Tuple
 
+import numpy as np
 import torch
 from torch import nn
-from torch.utils.data import DataLoader, random_split
-from torchvision.datasets import MNIST
-from torchvision import transforms
+import torch.nn.functional as F
+import gymnasium as gym
 
-from .preprocess import prepare_datasets
+# deterministic helper -----------------------------------------------------------------
 
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+def set_seed(seed: int | None = None) -> None:
+    if seed is None:
+        return
+    torch.manual_seed(seed)
+    np.random.seed(seed)
 
 
-class MLP(nn.Module):
-    """A very small two-layer perceptron for 28×28 images."""
+# small policy network ------------------------------------------------------------------
 
-    def __init__(self, in_dim: int = 28 * 28, hidden: int = 256, n_classes: int = 10):
+class PolicyNet(nn.Module):
+    def __init__(self, obs_dim: int, act_dim: int):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(in_dim, hidden),
-            nn.ReLU(inplace=True),
-            nn.Linear(hidden, n_classes),
+            nn.Linear(obs_dim, 128), nn.ReLU(),
+            nn.Linear(128, 128), nn.ReLU(),
+            nn.Linear(128, act_dim)
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:  # noqa: D401 – simple forward
-        x = x.flatten(start_dim=1)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:  # logits
         return self.net(x)
 
 
-def train_model(cfg: Dict) -> Tuple[nn.Module, List[float], List[float]]:
-    """Train the model and return (model, train_losses, val_losses)."""
+# REINFORCE -----------------------------------------------------------------------------
 
-    # ------------------------------------------------------------------
-    # 1) Data
-    # ------------------------------------------------------------------
-    data_root = Path("data")
-    train_ds, test_ds = prepare_datasets(data_root)
+def _collect_episode(env: gym.Env, policy: PolicyNet, device: torch.device) -> Tuple[List[torch.Tensor], List[torch.Tensor], float]:
+    obs, _ = env.reset()
+    done = False
+    log_probs: List[torch.Tensor] = []
+    rewards: List[float] = []
+    ep_ret = 0.0
+    while not done:
+        obs_t = torch.as_tensor(obs, dtype=torch.float32, device=device)
+        logits = policy(obs_t)
+        dist = torch.distributions.Categorical(logits=logits)
+        action = dist.sample()
+        log_probs.append(dist.log_prob(action))
+        obs, reward, terminated, truncated, _ = env.step(action.item())
+        done = terminated or truncated
+        rewards.append(reward)
+        ep_ret += reward
+    returns: List[float] = []
+    g = 0.0
+    for r in reversed(rewards):
+        g = r + 0.99 * g
+        returns.insert(0, g)
+    returns_t = torch.as_tensor(returns, dtype=torch.float32, device=device)
+    returns_t = (returns_t - returns_t.mean()) / (returns_t.std() + 1e-6)
+    return log_probs, returns_t, ep_ret
 
-    val_split = cfg.get("val_split", 0.1)
-    val_len = int(len(train_ds) * val_split)
-    train_len = len(train_ds) - val_len
-    train_ds, val_ds = random_split(train_ds, [train_len, val_len])
 
-    dl_train = DataLoader(train_ds, batch_size=cfg["batch_size"], shuffle=True)
-    dl_val = DataLoader(val_ds, batch_size=cfg["batch_size"], shuffle=False)
+def train(env: gym.Env, cfg: Dict, models_dir: Path) -> Tuple[Path, List[float]]:
+    """Train policy; returns (path_to_checkpoint, reward_history)"""
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    obs_dim = env.observation_space.shape[0]
+    act_dim = env.action_space.n
 
-    # ------------------------------------------------------------------
-    # 2) Model, loss, optimiser
-    # ------------------------------------------------------------------
-    model = MLP().to(DEVICE)
-    criterion = nn.CrossEntropyLoss()
-    optimiser = torch.optim.Adam(model.parameters(), lr=cfg["lr"])
+    policy = PolicyNet(obs_dim, act_dim).to(device)
+    optimizer = torch.optim.Adam(policy.parameters(), lr=cfg["lr"])
 
-    # ------------------------------------------------------------------
-    # 3) Training loop
-    # ------------------------------------------------------------------
-    train_losses, val_losses = [], []
-    epochs = cfg["epochs"]
-    for ep in range(1, epochs + 1):
-        model.train()
-        ep_loss = 0.0
-        for xb, yb in dl_train:
-            xb, yb = xb.to(DEVICE), yb.to(DEVICE)
-            optimiser.zero_grad(set_to_none=True)
-            preds = model(xb)
-            loss = criterion(preds, yb)
-            loss.backward()
-            optimiser.step()
-            ep_loss += loss.item() * xb.size(0)
-        ep_loss /= train_len
-        train_losses.append(ep_loss)
-
-        # ––– validation –––
-        model.eval()
-        with torch.no_grad():
-            val_loss = 0.0
-            for xb, yb in dl_val:
-                xb, yb = xb.to(DEVICE), yb.to(DEVICE)
-                preds = model(xb)
-                val_loss += criterion(preds, yb).item() * xb.size(0)
-            val_loss /= val_len
-        val_losses.append(val_loss)
-
-        print(json.dumps({"epoch": ep, "train_loss": ep_loss, "val_loss": val_loss}))
-
-    # save model
-    models_dir = Path("models"); models_dir.mkdir(exist_ok=True)
-    torch.save(model.state_dict(), models_dir / "mnist_mlp.pt")
-
-    return model, train_losses, val_losses
+    reward_history: List[float] = []
+    start = time.time()
+    for ep in range(1, cfg["epochs"] + 1):
+        log_probs, returns_t, ep_ret = _collect_episode(env, policy, device)
+        loss = -torch.stack([lp * G for lp, G in zip(log_probs, returns_t)]).sum()
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        reward_history.append(ep_ret)
+        if ep % cfg["log_every"] == 0:
+            elapsed = time.time() - start
+            print(f"[TRAIN] Episode {ep:4d}/{cfg['epochs']}  |  return = {ep_ret:6.1f}  |  elapsed {elapsed:5.1f}s", flush=True)
+    models_dir.mkdir(parents=True, exist_ok=True)
+    ckpt_path = models_dir / "policy_cartpole.pt"
+    torch.save(policy.state_dict(), ckpt_path)
+    print(f"[TRAIN] finished – checkpoint saved to {ckpt_path.resolve()}")
+    return ckpt_path, reward_history

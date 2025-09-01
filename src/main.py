@@ -1,63 +1,64 @@
+"""src/main.py
+Entry-point called via `python -m src.main`.
+It wires together preprocessing, training, evaluation and
+stores artefacts / figures in the required locations.
+"""
 from __future__ import annotations
+
 import json
 from pathlib import Path
-from typing import Dict
 
 import matplotlib
-matplotlib.use("Agg")  # headless back-ends are safer on servers/CI
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import seaborn as sns
 import yaml
 
-from .train import train_model
-from .evaluate import evaluate
+from . import preprocess, train, evaluate
 
-# -----------------------------------------------------------------------------
-# 1) Configuration handling
-# -----------------------------------------------------------------------------
-CONFIG_DIR = Path("config"); CONFIG_DIR.mkdir(exist_ok=True)
-CFG_FILE = CONFIG_DIR / "config.yaml"
+# --------------------------------------------------------------------------------------
+ROOT = Path(__file__).resolve().parent.parent
+IMG_DIR = ROOT / ".research" / "iteration21" / "images"
+IMG_DIR.mkdir(parents=True, exist_ok=True)
+MODELS_DIR = ROOT / "models"
+CONFIG_FILE = ROOT / "config" / "cartpole.yaml"
 
-def _default_cfg() -> Dict:
-    return {
-        "batch_size": 128,
-        "epochs": 5,
-        "lr": 1e-3,
-        "val_split": 0.1,
-    }
 
-if CFG_FILE.exists():
-    cfg = yaml.safe_load(CFG_FILE.read_text())
-else:
-    cfg = _default_cfg()
-    CFG_FILE.write_text(yaml.safe_dump(cfg))
-    print("[INFO] Default config.yaml created – feel free to edit and re-run.")
+def main():
+    # ------------------- load config -------------------
+    cfg = yaml.safe_load(CONFIG_FILE.read_text())
+    print("[MAIN] Loaded config:\n" + json.dumps(cfg, indent=2))
 
-print("[INFO] Config:", json.dumps(cfg, indent=2))
+    # ------------------- preprocessing -----------------
+    env = preprocess.make_env(cfg)
 
-# -----------------------------------------------------------------------------
-# 2) Run the pipeline
-# -----------------------------------------------------------------------------
-model, train_losses, val_losses = train_model(cfg)
-acc = evaluate(model, batch_size=cfg["batch_size"])
-print(json.dumps({"test_accuracy": acc}))
+    # ------------------- training ----------------------
+    ckpt_path, reward_history = train.train(env, cfg, MODELS_DIR)
 
-# -----------------------------------------------------------------------------
-# 3) Visualisation – save as PDF for publication quality
-# -----------------------------------------------------------------------------
-# All images must be stored under `.research/iteration20/images` as required.
-img_dir = Path(".research/iteration20/images")
-img_dir.mkdir(parents=True, exist_ok=True)
+    # save reward curve
+    sns.set_theme(style="darkgrid")
+    plt.figure(figsize=(6, 3))
+    plt.plot(reward_history)
+    plt.xlabel("Episode")
+    plt.ylabel("Return")
+    plt.title("Training Curve – CartPole-v1")
+    plt.tight_layout()
+    out_fig = IMG_DIR / "training_curve.pdf"
+    plt.savefig(out_fig, bbox_inches="tight")
+    print(f"[MAIN] Training curve saved → {out_fig.relative_to(ROOT)}")
 
-plt.figure(figsize=(6, 3))
-plt.plot(train_losses, label="Train loss")
-plt.plot(val_losses, label="Validation loss")
-plt.xlabel("Epoch")
-plt.ylabel("Cross-entropy loss")
-plt.legend()
-plt.tight_layout()
+    # ------------------- evaluation --------------------
+    eval_stats = evaluate.evaluate(env, ckpt_path, episodes=cfg["eval_episodes"])
+    print("[MAIN] Evaluation result:", json.dumps(eval_stats, indent=2))
 
-fig_path = img_dir / "mnist_loss_curves.pdf"
-plt.savefig(fig_path, dpi=300, bbox_inches="tight")
+    # persist evaluation as json for reproducibility
+    eval_path = ROOT / "data" / "eval_stats.json"
+    eval_path.parent.mkdir(exist_ok=True)
+    eval_path.write_text(json.dumps(eval_stats, indent=2))
+    print(f"[MAIN] Evaluation stats saved → {eval_path.relative_to(ROOT)}")
 
-# Print the POSIX path of the saved figure for easy reference.
-print(f"[INFO] Training curves saved → {fig_path.as_posix()}")
+    env.close()
+
+
+if __name__ == "__main__":
+    main()
