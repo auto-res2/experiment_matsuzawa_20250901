@@ -1,1 +1,13 @@
-# Please list the required python packages.
+torch
+torchvision
+torchaudio
+torcheval
+fvcore
+scikit-learn
+pandas
+matplotlib
+seaborn
+pillow
+tqdm
+jpeg4py
+numpy
