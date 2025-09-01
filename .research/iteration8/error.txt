@@ -1,0 +1,17 @@
+/home/runner/work/experiment_matsuzawa_20250901/experiment_matsuzawa_20250901/src/train.py:217: FutureWarning: `torch.cuda.amp.GradScaler(args...)` is deprecated. Please use `torch.amp.GradScaler('cuda', args...)` instead.
+  scaler = GradScaler()
+  0%|          | 0.00/169M [00:00<?, ?B/s]  1%|          | 1.11M/169M [00:00<00:15, 11.1MB/s]  2%|▏         | 4.13M/169M [00:00<00:07, 22.1MB/s]  4%|▍         | 7.21M/169M [00:00<00:06, 26.0MB/s]  6%|▌         | 10.4M/169M [00:00<00:05, 28.2MB/s]  8%|▊         | 13.6M/169M [00:00<00:05, 29.5MB/s] 10%|▉         | 16.8M/169M [00:00<00:05, 30.3MB/s] 12%|█▏        | 20.2M/169M [00:00<00:04, 31.1MB/s] 14%|█▍        | 23.4M/169M [00:00<00:04, 31.4MB/s] 16%|█▌        | 26.5M/169M [00:00<00:04, 31.1MB/s] 18%|█▊        | 29.6M/169M [00:01<00:04, 30.8MB/s] 19%|█▉        | 32.7M/169M [00:01<00:04, 30.3MB/s] 22%|██▏       | 36.6M/169M [00:01<00:04, 32.9MB/s] 25%|██▌       | 42.7M/169M [00:01<00:03, 41.1MB/s] 29%|██▉       | 49.0M/169M [00:01<00:02, 47.7MB/s] 33%|███▎      | 55.3M/169M [00:01<00:02, 52.1MB/s] 37%|███▋      | 61.7M/169M [00:01<00:01, 55.7MB/s] 40%|████      | 68.1M/169M [00:01<00:01, 58.0MB/s] 44%|████▍     | 74.4M/169M [00:01<00:01, 59.3MB/s] 48%|████▊     | 80.5M/169M [00:01<00:01, 60.0MB/s] 51%|█████▏    | 86.7M/169M [00:02<00:01, 60.5MB/s] 55%|█████▌    | 93.2M/169M [00:02<00:01, 61.6MB/s] 59%|█████▉    | 99.4M/169M [00:02<00:01, 61.3MB/s] 62%|██████▏   | 105M/169M [00:02<00:01, 60.5MB/s]  66%|██████▌   | 112M/169M [00:02<00:00, 60.0MB/s] 70%|██████▉   | 118M/169M [00:02<00:00, 59.7MB/s] 73%|███████▎  | 124M/169M [00:02<00:00, 59.3MB/s] 77%|███████▋  | 130M/169M [00:02<00:00, 59.1MB/s] 80%|████████  | 135M/169M [00:02<00:00, 59.0MB/s] 84%|████████▎ | 141M/169M [00:02<00:00, 59.1MB/s] 87%|████████▋ | 147M/169M [00:03<00:00, 59.0MB/s] 91%|█████████ | 153M/169M [00:03<00:00, 58.8MB/s] 94%|█████████▍| 159M/169M [00:03<00:00, 58.8MB/s] 98%|█████████▊| 165M/169M [00:03<00:00, 58.8MB/s]100%|██████████| 169M/169M [00:03<00:00, 49.5MB/s]
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/runner/work/experiment_matsuzawa_20250901/experiment_matsuzawa_20250901/src/main.py", line 190, in <module>
+    main()
+  File "/home/runner/work/experiment_matsuzawa_20250901/experiment_matsuzawa_20250901/src/main.py", line 180, in main
+    run_exp1_vision(args)
+  File "/home/runner/work/experiment_matsuzawa_20250901/experiment_matsuzawa_20250901/src/main.py", line 46, in run_exp1_vision
+    buf = HydraSketchBuffer(latent_dim=512, bitwidth=64, max_items=1000)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/experiment_matsuzawa_20250901/experiment_matsuzawa_20250901/src/train.py", line 77, in __init__
+    R = torch.randint(0, 2, (latent_dim, bitwidth), generator=g, dtype=torch.float16, device=device)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: Expected a 'cuda' device type for generator but found 'cpu'
