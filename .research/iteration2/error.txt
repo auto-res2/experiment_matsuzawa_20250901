@@ -1,0 +1,15 @@
+  0%|          | 0.00/169M [00:00<?, ?B/s]  0%|          | 65.5k/169M [00:00<05:01, 561kB/s]  0%|          | 229k/169M [00:00<02:42, 1.04MB/s]  1%|          | 918k/169M [00:00<00:52, 3.19MB/s]  2%|▏         | 3.67M/169M [00:00<00:15, 11.0MB/s]  6%|▌         | 10.4M/169M [00:00<00:06, 26.2MB/s] 10%|▉         | 16.7M/169M [00:00<00:04, 34.4MB/s] 14%|█▎        | 23.1M/169M [00:00<00:03, 39.5MB/s] 18%|█▊        | 29.6M/169M [00:00<00:03, 42.9MB/s] 21%|██▏       | 36.0M/169M [00:01<00:02, 45.0MB/s] 25%|██▌       | 42.4M/169M [00:01<00:02, 46.5MB/s] 29%|██▉       | 48.8M/169M [00:01<00:02, 47.5MB/s] 33%|███▎      | 55.2M/169M [00:01<00:02, 48.3MB/s] 36%|███▋      | 61.6M/169M [00:01<00:02, 48.7MB/s] 40%|████      | 68.0M/169M [00:01<00:02, 49.0MB/s] 44%|████▍     | 74.4M/169M [00:01<00:01, 49.2MB/s] 48%|████▊     | 80.7M/169M [00:02<00:01, 49.2MB/s] 52%|█████▏    | 87.2M/169M [00:02<00:01, 49.4MB/s] 55%|█████▌    | 93.4M/169M [00:02<00:01, 49.2MB/s] 59%|█████▉    | 99.4M/169M [00:02<00:01, 51.6MB/s] 62%|██████▏   | 105M/169M [00:02<00:01, 49.3MB/s]  65%|██████▍   | 110M/169M [00:02<00:01, 48.2MB/s] 68%|██████▊   | 115M/169M [00:02<00:01, 47.5MB/s] 71%|███████▏  | 121M/169M [00:02<00:00, 48.8MB/s] 74%|███████▍  | 126M/169M [00:02<00:00, 48.3MB/s] 77%|███████▋  | 131M/169M [00:03<00:00, 49.4MB/s] 80%|████████  | 136M/169M [00:03<00:00, 49.1MB/s] 83%|████████▎ | 141M/169M [00:03<00:00, 46.9MB/s] 87%|████████▋ | 146M/169M [00:03<00:00, 49.4MB/s] 89%|████████▉ | 151M/169M [00:03<00:00, 48.5MB/s] 92%|█████████▏| 156M/169M [00:03<00:00, 47.0MB/s] 96%|█████████▌| 162M/169M [00:03<00:00, 49.5MB/s] 99%|█████████▊| 167M/169M [00:03<00:00, 49.2MB/s]100%|██████████| 169M/169M [00:03<00:00, 44.0MB/s]
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/runner/work/experiment_matsuzawa_20250901/experiment_matsuzawa_20250901/src/main.py", line 195, in <module>
+    main()
+  File "/home/runner/work/experiment_matsuzawa_20250901/experiment_matsuzawa_20250901/src/main.py", line 188, in main
+    experiment_1(args)
+  File "/home/runner/work/experiment_matsuzawa_20250901/experiment_matsuzawa_20250901/src/main.py", line 50, in experiment_1
+    buffer = HydraSketchBuffer(latent_dim=latent_dim, bitwidth=64, max_items=1000).to(device)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/experiment_matsuzawa_20250901/experiment_matsuzawa_20250901/src/train.py", line 67, in __init__
+    self.R = torch.randint(0, 2, (latent_dim, bitwidth), generator=rng, device=device, dtype=torch.float32)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: Expected a 'cuda' device type for generator but found 'cpu'
