@@ -1,8 +1,9 @@
+
 """
 evaluate.py – Evaluation & visualisation
 The script loads the trained model, evaluates on the held-out test set
 and produces a PDF figure suitable for academic publication.
-Figures are stored under ./.research/iteration16/images (as per updated
+Figures are stored under ./.research/iteration17/images (as per updated
 specification).
 """
 from __future__ import annotations
@@ -44,7 +45,7 @@ except ModuleNotFoundError:  # pragma: no cover – local fallback for robustnes
 from .train import SimpleRegressor
 
 # Directory mandated by the updated instructions
-IMG_DIR = Path(".research/iteration16/images")
+IMG_DIR = Path(".research/iteration17/images")
 IMG_DIR.mkdir(parents=True, exist_ok=True)
 
 

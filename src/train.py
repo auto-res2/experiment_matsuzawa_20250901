@@ -1,3 +1,4 @@
+
 """
 train.py – Training utilities for a toy regression task
 The goal is to keep the code base minimal but still demonstrate the
@@ -82,15 +83,20 @@ def train_model(
     x_tr, y_tr = train_xy
     x_va, y_va = val_xy
 
-    net = SimpleRegressor(cfg["hidden_dim"]).to(device)
-    opt = torch.optim.Adam(net.parameters(), lr=cfg["lr"])
+    net = SimpleRegressor(int(cfg["hidden_dim"])).to(device)
+
+    # Cast the learning-rate to float to guard against accidental string values
+    lr: float = float(cfg["lr"])
+    opt = torch.optim.Adam(net.parameters(), lr=lr)
     loss_fn = nn.MSELoss()
 
-    dl = DataLoader(TensorDataset(x_tr, y_tr), batch_size=cfg["batch_size"], shuffle=True)
+    dl = DataLoader(
+        TensorDataset(x_tr, y_tr), batch_size=int(cfg["batch_size"]), shuffle=True
+    )
 
     history = {"train_loss": [], "val_loss": []}
     t0 = time.time()
-    for epoch in range(cfg["epochs"]):
+    for epoch in range(int(cfg["epochs"])):
         net.train()
         for xb, yb in dl:
             xb, yb = xb.to(device), yb.to(device)
@@ -107,7 +113,7 @@ def train_model(
             va_loss = loss_fn(net(x_va.to(device)), y_va.to(device)).item()
         history["train_loss"].append(tr_loss)
         history["val_loss"].append(va_loss)
-        if (epoch + 1) % cfg["print_every"] == 0 or epoch == 0:
+        if (epoch + 1) % int(cfg["print_every"]) == 0 or epoch == 0:
             print(
                 f"Epoch {epoch+1:03d}/{cfg['epochs']} – "
                 f"train MSE: {tr_loss:.4f} – val MSE: {va_loss:.4f}"
