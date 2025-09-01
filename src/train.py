@@ -63,8 +63,11 @@ class HydraSketchBuffer:
         self.bitwidth = bitwidth
         self.latent_dim = latent_dim
         self.device = device
-        rng = torch.Generator().manual_seed(0)
-        self.R = torch.randint(0, 2, (latent_dim, bitwidth), generator=rng, device=device, dtype=torch.float32)
+        # Make sure the PRNG lives on the same device as the target tensor to avoid
+        # "generator on cpu vs tensor on cuda" errors with newer PyTorch versions.
+        rng = torch.Generator(device=device).manual_seed(0)
+        self.R = torch.randint(0, 2, (latent_dim, bitwidth), generator=rng,
+                               device=device, dtype=torch.float32)
         self.R[self.R == 0] = -1.0
         self.sampler = ReservoirSampler(max_items)
 

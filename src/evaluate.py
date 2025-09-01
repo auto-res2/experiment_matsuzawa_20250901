@@ -13,9 +13,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # -----------------------------------------------------------------------------
-#  Figure directory – all images are stored under `.research/iteration2/images`
+#  Figure directory – all images are stored under `.research/iteration3/images`
 # -----------------------------------------------------------------------------
-FIG_DIR = Path(".research/iteration2/images")
+FIG_DIR = Path(".research/iteration3/images")
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 # -----------------------------------------------------------------------------
