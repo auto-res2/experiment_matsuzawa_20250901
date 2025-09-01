@@ -1,0 +1,16 @@
+  0%|          | 0.00/9.91M [00:00<?, ?B/s]100%|██████████| 9.91M/9.91M [00:00<00:00, 107MB/s]
+  0%|          | 0.00/28.9k [00:00<?, ?B/s]100%|██████████| 28.9k/28.9k [00:00<00:00, 11.8MB/s]
+  0%|          | 0.00/1.65M [00:00<?, ?B/s]100%|██████████| 1.65M/1.65M [00:00<00:00, 102MB/s]
+  0%|          | 0.00/4.54k [00:00<?, ?B/s]100%|██████████| 4.54k/4.54k [00:00<00:00, 7.00MB/s]
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/runner/work/experiment_matsuzawa_20250901/experiment_matsuzawa_20250901/src/main.py", line 110, in <module>
+    pipeline()
+  File "/home/runner/work/experiment_matsuzawa_20250901/experiment_matsuzawa_20250901/src/main.py", line 95, in pipeline
+    model_path = train_model({"epochs": epochs, "batch_size": batch_size, "lr": lr})
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/experiment_matsuzawa_20250901/experiment_matsuzawa_20250901/src/train.py", line 62, in train_model
+    epochs: int = int(cfg.get("epochs", 3))  # 3 epochs are enough for 97-98 %
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: int() argument must be a string, a bytes-like object or a real number, not 'OptionInfo'
