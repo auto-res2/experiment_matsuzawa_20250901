@@ -57,24 +57,29 @@ def train_model(cfg_path: Path, model_dir: Path) -> Tuple[nn.Module, Dict[str, f
     with open(cfg_path, "r") as f:
         cfg = yaml.safe_load(f)
 
+    # Explicitly cast numeric hyper-parameters that might have been read as strings
+    lr = float(cfg.get("lr", 1e-3))
+    weight_decay = float(cfg.get("weight_decay", 0.0))
+    batch_size = int(cfg.get("batch_size", 32))
+
     # 1. Load (or generate) data ------------------------------------------------
     (x_train, y_train), (x_val, y_val) = load_preprocessed_data(cfg)
 
     train_ds = TensorDataset(x_train, y_train)
     val_ds   = TensorDataset(x_val, y_val)
 
-    train_loader = DataLoader(train_ds, batch_size=cfg["batch_size"], shuffle=True)
-    val_loader   = DataLoader(val_ds, batch_size=cfg["batch_size"], shuffle=False)
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
+    val_loader   = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
 
     # 2. Instantiate model & optimiser -----------------------------------------
     model = LogisticRegression(in_dim=x_train.shape[1], out_dim=len(torch.unique(y_train)))
     model.train()
 
-    optimiser = torch.optim.Adam(model.parameters(), lr=cfg["lr"], weight_decay=cfg["weight_decay"])
+    optimiser = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
     loss_fn   = nn.CrossEntropyLoss()
 
     # 3. Training loop ----------------------------------------------------------
-    for epoch in range(cfg["epochs"]):
+    for epoch in range(int(cfg.get("epochs", 1))):
         total_loss = 0.0
         for xb, yb in train_loader:
             optimiser.zero_grad()
@@ -83,7 +88,7 @@ def train_model(cfg_path: Path, model_dir: Path) -> Tuple[nn.Module, Dict[str, f
             loss.backward()
             optimiser.step()
             total_loss += loss.item() * xb.size(0)
-        if (epoch + 1) % cfg["print_every"] == 0:
+        if (epoch + 1) % int(cfg.get("print_every", 1)) == 0:
             avg_loss = total_loss / len(train_loader.dataset)
             val_acc  = _eval_accuracy(model, val_loader)
             print(f"[train] epoch={epoch+1:03d}  loss={avg_loss:.4f}  val_acc={val_acc:.4f}")

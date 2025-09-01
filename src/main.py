@@ -9,7 +9,7 @@ The pipeline performs the following steps:
     3. Train a simple logistic-regression model (src.train).
     4. Evaluate the model (src.evaluate).
     5. Save a high-quality PDF figure that visualises the training data and
-       decision boundary to .research/iteration12/images.
+       decision boundary to .research/iteration13/images.
 
 All console outputs include enough detail so that a reviewer can reproduce the
 results without digging into intermediate files.
@@ -37,7 +37,7 @@ from .preprocess import load_preprocessed_data
 ROOT_DIR        = Path(__file__).resolve().parent.parent
 CONFIG_PATH     = ROOT_DIR / "config" / "config.yaml"
 MODEL_DIR       = ROOT_DIR / "models"
-IMG_DIR         = ROOT_DIR / ".research" / "iteration12" / "images"
+IMG_DIR         = ROOT_DIR / ".research" / "iteration13" / "images"
 
 for _d in (MODEL_DIR, IMG_DIR):
     _d.mkdir(parents=True, exist_ok=True)
@@ -117,7 +117,7 @@ def run_pipeline():
     # ------------------------------------------------------------------
     _plot_2d_projection(model, yaml.safe_load(CONFIG_PATH.read_text()))
 
-    print("\nAll done – you can now open the PDF in .research/iteration12/images 🎉")
+    print("\nAll done – you can now open the PDF in .research/iteration13/images 🎉")
 
 
 if __name__ == "__main__":
