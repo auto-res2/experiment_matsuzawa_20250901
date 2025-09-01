@@ -6,5 +6,82 @@
     "multi-scale diffusion optimization",
     "coarse-to-fine diffusion speedup",
     "hierarchical denoising efficiency"
+  ],
+  "research_study_list": [
+    {
+      "title": "Accelerating Guided Diffusion Sampling with Splitting Numerical Methods"
+    },
+    {
+      "title": "Simple Hierarchical Planning with Diffusion"
+    },
+    {
+      "title": "Faster Diffusion: Rethinking the Role of the Encoder for Diffusion Model Inference"
+    },
+    {
+      "title": "Wavelet Diffusion Models Are Fast and Scalable Image Generators"
+    },
+    {
+      "title": "Diffusion Sampling with Momentum for Mitigating Divergence Artifacts"
+    },
+    {
+      "title": "A Simple Early Exiting Framework for Accelerated Sampling in Diffusion Models"
+    },
+    {
+      "title": "SnapFusion: Text-to-Image Diffusion Model on Mobile Devices within Two Seconds"
+    },
+    {
+      "title": "Improving Training Efficiency of Diffusion Models via Multi-Stage Framework and Tailored Multi-Decoder Architecture"
+    },
+    {
+      "title": "EfficientDM: Efficient Quantization-Aware Fine-Tuning of Low-Bit Diffusion Models"
+    },
+    {
+      "title": "Clockwork Diffusion: Efficient Generation With Model-Step Distillation"
+    },
+    {
+      "title": "Learning multi-scale local conditional probability models of images"
+    },
+    {
+      "title": "Learning multi-scale local conditional probability models of images"
+    },
+    {
+      "title": "Generative Powers of Ten"
+    },
+    {
+      "title": "OMS-DPM: Optimizing the Model Schedule for Diffusion Probabilistic Models"
+    },
+    {
+      "title": "MultiDiffusion: Fusing Diffusion Paths for Controlled Image Generation"
+    },
+    {
+      "title": "Self-Refining Diffusion Samplers: Enabling Parallelization via Parareal Iterations"
+    },
+    {
+      "title": "A Simple Early Exiting Framework for Accelerated Sampling in Diffusion Models"
+    },
+    {
+      "title": "Wavelet Diffusion Models Are Fast and Scalable Image Generators"
+    },
+    {
+      "title": "Leveraging Early-Stage Robustness in Diffusion Models for Efficient and High-Quality Image Synthesis"
+    },
+    {
+      "title": "Improving Training Efficiency of Diffusion Models via Multi-Stage Framework and Tailored Multi-Decoder Architecture"
+    },
+    {
+      "title": "On the Posterior Distribution in Denoising: Application to Uncertainty Quantification"
+    },
+    {
+      "title": "Efficient Hierarchical Entropy Model for Learned Point Cloud Compression"
+    },
+    {
+      "title": "Hierarchical Randomized Smoothing"
+    },
+    {
+      "title": "How Deep Networks Learn Sparse and Hierarchical Data: the Sparse Random Hierarchy Model"
+    },
+    {
+      "title": "Hierarchical Quantized Autoencoders"
+    }
   ]
 }
