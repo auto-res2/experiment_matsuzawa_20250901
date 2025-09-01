@@ -1,0 +1,9 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/runner/work/experiment_matsuzawa_20250901/experiment_matsuzawa_20250901/src/main.py", line 10, in <module>
+    from src.evaluate import experiment1, experiment2, experiment3
+  File "/home/runner/work/experiment_matsuzawa_20250901/experiment_matsuzawa_20250901/src/evaluate.py", line 43, in <module>
+    from hdiff import HierarchicalDiffuser            # original Hierarchical Diffuser
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ModuleNotFoundError: No module named 'hdiff'
