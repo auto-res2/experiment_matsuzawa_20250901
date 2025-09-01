@@ -19,6 +19,33 @@ from .train import train_model
 from .evaluate import evaluate_model
 
 # --------------------------------------------------------------------
+#  Ensure that every image created by matplotlib is written to the
+#  project-wide output directory `.research/iteration9/images`.
+# --------------------------------------------------------------------
+_IMG_DIR = Path(".research/iteration9/images")
+_IMG_DIR.mkdir(parents=True, exist_ok=True)
+
+try:
+    # Matplotlib is only imported if it is installed and used later on.
+    import matplotlib.pyplot as _plt  # noqa: WPS433
+
+    _orig_savefig = _plt.savefig
+
+    def _patched_savefig(*args, **kwargs):  # type: ignore[override]
+        """Redirect `savefig` calls so that files end up in `_IMG_DIR`."""
+        if args and isinstance(args[0], (str, Path)):
+            filename = Path(args[0])
+            if not str(filename).startswith(str(_IMG_DIR)):
+                filename = _IMG_DIR / filename.name
+            args = (filename, *args[1:])
+        return _orig_savefig(*args, **kwargs)
+
+    _plt.savefig = _patched_savefig  # type: ignore[assignment]
+except ModuleNotFoundError:
+    # Matplotlib is optional – silently ignore if not present.
+    pass
+
+# --------------------------------------------------------------------
 #  CLRD large-scale experiment suite – copied verbatim (with minor edits
 #  so that imports stay *relative*).  The block is long but it requires
 #  zero modification for the basic MNIST pipeline to work; it is kept so
@@ -27,15 +54,17 @@ from .evaluate import evaluate_model
 # --------------------------------------------------------------------
 # The code is placed in a separate file to keep this snippet readable.
 # To avoid massive duplication we simply `exec` the shipped string that
-# contains the original implementation.
-from importlib import resources as _res
+# contains the original implementation (if the file is present).
+try:
+    from importlib import resources as _res
 
-_EXP_CODE = (
-    _res.files(__package__)
-    .joinpath("_experiment_code.py")
-    .read_text(encoding="utf-8")
-)
-exec(_EXP_CODE, globals())  # noqa: S102 – deliberate exec of trusted code
+    _exp_path = _res.files(__package__).joinpath("_experiment_code.py")
+    if _exp_path.is_file():
+        _EXP_CODE = _exp_path.read_text(encoding="utf-8")
+        exec(_EXP_CODE, globals())  # noqa: S102 – deliberate exec of trusted code
+except (FileNotFoundError, ModuleNotFoundError):
+    # Optional experiment code not available – continue without it.
+    pass
 
 # --------------------------------------------------------------------
 #  Typer CLI – we re-export the commands from the CLRD suite (`exp1/2/3`)
