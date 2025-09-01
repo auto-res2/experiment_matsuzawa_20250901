@@ -1,18 +1,3 @@
-"""src/main.py
---------------
-Entry-point for the experiment – invoked via `python -m src.main`.
-It orchestrates the whole pipeline:
-  1. Loads hyper-parameters from `config/config.yaml` (creates a reasonable
-     default if the file is missing).
-  2. Calls `src.train.train_model`.
-  3. Evaluates the trained model via `src.evaluate.evaluate`.
-  4. Generates a PDF figure with training/validation curves and stores it in
-     `.research/iteration19/images` as mandated.
-  5. Writes a small summary of the results to *stdout*.
-
-The code purposefully avoids any external dependencies beyond the ones listed
-in `requirements.txt` and PyTorch/torchvision.
-"""
 from __future__ import annotations
 import json
 from pathlib import Path
@@ -59,8 +44,8 @@ print(json.dumps({"test_accuracy": acc}))
 # -----------------------------------------------------------------------------
 # 3) Visualisation – save as PDF for publication quality
 # -----------------------------------------------------------------------------
-# All images must be stored under `.research/iteration19/images` as required.
-img_dir = Path(".research/iteration19/images")
+# All images must be stored under `.research/iteration20/images` as required.
+img_dir = Path(".research/iteration20/images")
 img_dir.mkdir(parents=True, exist_ok=True)
 
 plt.figure(figsize=(6, 3))
@@ -74,7 +59,5 @@ plt.tight_layout()
 fig_path = img_dir / "mnist_loss_curves.pdf"
 plt.savefig(fig_path, dpi=300, bbox_inches="tight")
 
-# The previous implementation attempted to use Path.relative_to with a mixture
-# of absolute/relative paths, which raises `ValueError`.  Instead, we simply
-# print the (relative) POSIX path that we know lives inside the project tree.
+# Print the POSIX path of the saved figure for easy reference.
 print(f"[INFO] Training curves saved → {fig_path.as_posix()}")
