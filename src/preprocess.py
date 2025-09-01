@@ -9,6 +9,17 @@ import numpy as np
 from typing import Dict
 
 
+def _dim_from_space(space) -> int:
+    """Return scalar dimension for (Box | Discrete) spaces."""
+    from gymnasium.spaces import Discrete  # type: ignore
+
+    if hasattr(space, "shape") and space.shape is not None and len(space.shape) > 0:
+        return space.shape[0]
+    if isinstance(space, Discrete):
+        return 1
+    raise ValueError("Unsupported space type – cannot determine dimension.")
+
+
 def load_dataset(env) -> Dict[str, np.ndarray]:
     """Return a dictionary with keys observations / actions / rewards / terminals.
     If the env already supplies a dataset (D4RL) we simply forward it.
@@ -17,8 +28,8 @@ def load_dataset(env) -> Dict[str, np.ndarray]:
         return env.get_dataset()
 
     # ----------------  fallback: create a random dataset  ----------------
-    obs_dim = env.observation_space.shape[0]
-    act_dim = env.action_space.shape[0]
+    obs_dim = _dim_from_space(env.observation_space)
+    act_dim = _dim_from_space(env.action_space)
     N = 10_000  # small dummy dataset
     return {
         "observations": np.random.randn(N, obs_dim).astype(np.float32),

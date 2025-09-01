@@ -20,6 +20,30 @@ from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
 # ---------------------------------------------------------------------------
+# Helper --------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+
+def _space_dim(space) -> int:
+    """Return *scalar* dimensionality for both Box and Discrete spaces.
+
+    For Box spaces we flatten the shape.  For Discrete spaces we return 1 so
+    that we can treat actions as a single continuous value that will later be
+    mapped back to an integer inside *rollout*.
+    """
+    # Lazy import to avoid imposing a hard dependency on Gym / Gymnasium when
+    # running unit-tests that mock the space objects.
+    from gymnasium.spaces import Discrete  # type: ignore
+
+    if hasattr(space, "shape") and space.shape is not None and len(space.shape) > 0:
+        return int(np.prod(space.shape))
+    if isinstance(space, Discrete):
+        return 1
+    # Fallback – assume the object *is* already an int (e.g. passed directly
+    # from tests).
+    return int(space)
+
+
+# ---------------------------------------------------------------------------
 # Generic base class ---------------------------------------------------------
 # ---------------------------------------------------------------------------
 
@@ -39,8 +63,8 @@ class BaseAgent(ABC):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # Tiny 2-layer MLP used as a behaviour-cloning policy.
-        in_dim = int(np.prod(obs_space.shape)) if hasattr(obs_space, "shape") else obs_space
-        out_dim = int(np.prod(act_space.shape)) if hasattr(act_space, "shape") else act_space
+        in_dim = _space_dim(obs_space)
+        out_dim = _space_dim(act_space)
         hidden = cfg.get("hidden", 64)
         self.net = nn.Sequential(
             nn.Linear(in_dim, hidden),
@@ -92,6 +116,9 @@ class BaseAgent(ABC):
 
     def rollout(self, env, episodes: int = 1) -> Tuple[float, float]:
         """Run *episodes* episodes and return (success_rate, latency_ms)."""
+        # Lazy import to avoid hard dependency at top-level.
+        from gymnasium.spaces import Discrete  # type: ignore
+
         successes = 0
         latencies = []
         for _ in range(episodes):
@@ -99,7 +126,12 @@ class BaseAgent(ABC):
             obs, _ = env.reset()
             done, info = False, {}
             while not done:
-                action = self.act(obs)
+                raw_action = self.act(obs)
+                # Convert to valid env action if the space is discrete.
+                if isinstance(env.action_space, Discrete):
+                    action = int(np.clip(np.round(raw_action).astype(int), 0, env.action_space.n - 1))
+                else:
+                    action = raw_action.astype(env.action_space.dtype)
                 obs, _, terminated, truncated, info = env.step(action)
                 done = terminated or truncated
             latency = (time.time() - t0) * 1000.0  # ms
