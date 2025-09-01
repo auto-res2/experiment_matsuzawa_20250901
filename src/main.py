@@ -1,84 +1,40 @@
-'''src/main.py
-Main entry-point for running the demo experiment.  This script ties
-together the pre-processing, training, evaluation, and visualisation
-steps so that users can simply execute
+"""src/main.py
+Project entry-point.  Run via
     python -m src.main
-from the project root.
-
-All plots are saved as vector-graphics PDF in
-    .research/iteration8/images/
-per the project instructions.
-'''
+The script orchestrates preprocessing, training, evaluation, and logs results
+with academic-quality PDF figures saved under .research/iteration9/images.
+"""
 from __future__ import annotations
 
-import os
+import time
 from pathlib import Path
-from typing import Dict, Any
 
-import matplotlib
-matplotlib.use("Agg")  # headless / servers
-import matplotlib.pyplot as plt
-import seaborn as sns
-import torch
-
-from .preprocess import load_config
+from .preprocess import maybe_prepare_data
 from .train import train
 from .evaluate import evaluate
 
-
-# -------------------------  Directories  ------------------------- #
-IMG_DIR = Path(".research/iteration8/images")
-IMG_DIR.mkdir(parents=True, exist_ok=True)
+IMAGES_DIR = Path(".research/iteration9/images")
+IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 
 
-# ---------------------------  MAIN  ----------------------------- #
+def main() -> None:
+    t0 = time.time()
+    # 1. Pre-processing (idempotent)
+    maybe_prepare_data()
 
-def run_experiment(cfg: Dict[str, Any]):
-    print("\n==========  EXPERIMENT CONFIG  ==========")
-    for k, v in cfg.items():
-        print(f"{k:>15s}: {v}")
-    print("========================================\n")
+    # 2. Train the model
+    acc_train, model_path = train()
 
-    # --------------------  TRAIN  -------------------- #
-    policy, stats = train(cfg)
+    # 3. Evaluate
+    acc_test, _ = evaluate(model_path)
 
-    # ------------------  EVALUATE  ------------------- #
-    mean_r, std_r = evaluate(
-        policy,
-        cfg["env_name"],
-        cfg["eval_episodes"],
-        cfg["max_steps"],
-        device=cfg["device"],  # ensure tensors are on the correct device
-    )
-    print(
-        f"Evaluation over {cfg['eval_episodes']} episodes – mean reward = {mean_r:.2f} ± {std_r:.2f}\n"
-    )
-
-    # ------------------  PLOT CURVE  ------------------ #
-    sns.set_theme(style="darkgrid")
-    plt.figure(figsize=(6, 4))
-    plt.plot(stats["episode"], stats["reward"], label="Episode reward")
-    plt.xlabel("Episode")
-    plt.ylabel("Reward")
-    plt.title("Training curve – CartPole (REINFORCE)")
-    plt.tight_layout()
-    pdf_path = IMG_DIR / "training_curve.pdf"
-    plt.savefig(pdf_path, dpi=300, bbox_inches="tight")
-    # Print a user-friendly path without risking ValueError from pathlib.relative_to.
-    print(f"Saved training curve → {pdf_path}\n")
-
-    # Note: in a full research setting you might return additional
-    # artefacts (trained model path, raw CSV, etc.).  For brevity we end
-    # the demo here.
-
-
-def main():
-    cfg_path = os.environ.get("CONFIG", None)  # optional env-var override
-    cfg = load_config(cfg_path)
-    # if GPU is available, move model computations there – the demo is
-    # tiny so this mainly shows how to respect the GPU in the code.
-    cfg["device"] = "cuda" if torch.cuda.is_available() else "cpu"
-    run_experiment(cfg)
+    # 4. Print summary
+    print("\n================= SUMMARY =================")
+    print(f"Train accuracy (after final epoch): {acc_train * 100:.2f}%")
+    print(f"Test  accuracy: {acc_test  * 100:.2f}%")
+    print(f"Figures saved in: {IMAGES_DIR.resolve()}")
+    print(f"Total wall-clock time: {time.time() - t0:.1f} s")
+    print("===========================================")
 
 
 if __name__ == "__main__":

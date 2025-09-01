@@ -1,152 +1,141 @@
 """src/train.py
-Training utilities – implements a tiny REINFORCE agent so that the
-whole research pipeline specified in `src.main` can actually run on a
-single GPU / CPU machine without the (very large) third-party
-hierarchical–diffusion code base.
-
-The goal is NOT to reproduce ACHyD (which is far beyond the scope of
-this template) but to provide a fully runnable placeholder that
-respects all interface requirements:
-  • `train()` returns a trained PyTorch `nn.Module` and a Pandas
-    DataFrame with per-episode statistics so that `src.main` can
-    generate publication-quality PDF plots.
-  • The policy network is deliberately simple (2-layer MLP) so that it
-    trains quickly even on CPU while still demonstrating the full data
-    flow (pre-process → train → evaluate → visualise).
+Train a simple feed-forward neural network on the pre-processed dataset and
+save the trained model together with a training-loss figure (PDF).
 """
 from __future__ import annotations
 
-import random
-from dataclasses import dataclass
+import json
 from pathlib import Path
-from typing import Tuple, Dict, Any, List
+from typing import Tuple
 
 import numpy as np
-import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.nn.functional as F
-import gymnasium as gym
+import matplotlib
+matplotlib.use("Agg")  # head-less backend
+import matplotlib.pyplot as plt
+import yaml
+
+# Relative import – obey project layout
+from .preprocess import DATA_DIR, maybe_prepare_data
+
+# -----------------------------------------------------------------------------
+# Paths
+# -----------------------------------------------------------------------------
+MODELS_DIR = Path("models")
+IMAGES_DIR = Path(".research/iteration9/images")
+CONFIG_PATH = Path("config/config.yaml")
+
+MODELS_DIR.mkdir(parents=True, exist_ok=True)
+IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 
 
-# ------------------------  Model definition  ------------------------ #
-class PolicyNet(nn.Module):
-    """Small 2-layer MLP with a categorical action head."""
-
-    def __init__(self, obs_dim: int, act_dim: int, hidden: int = 128):
+# -----------------------------------------------------------------------------
+# Simple feed-forward classifier
+# -----------------------------------------------------------------------------
+class IrisNet(nn.Module):
+    def __init__(self, input_dim: int = 4, hidden_dim: int = 16, output_dim: int = 3):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(obs_dim, hidden), nn.ReLU(),
-            nn.Linear(hidden, hidden), nn.ReLU(),
-            nn.Linear(hidden, act_dim),
+            nn.Linear(input_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, output_dim),
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:  # logits
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.net(x)
 
 
-# ----------------------  REINFORCE algorithm  ----------------------- #
-@dataclass
-class TrainConfig:
-    env_name: str = "CartPole-v1"
-    total_episodes: int = 500
-    max_steps: int = 200
-    learning_rate: float = 1e-2
-    gamma: float = 0.99
-    hidden_size: int = 128
-    seed: int = 42
-    device: str = "cpu"
-    # Optional evaluation parameters (ignored by the trainer but accepted for
-    # convenience so the full YAML config can be passed without filtering).
-    eval_episodes: int = 20
+# -----------------------------------------------------------------------------
+# Utility
+# -----------------------------------------------------------------------------
+
+def _load_config() -> dict:
+    if CONFIG_PATH.exists():
+        with open(CONFIG_PATH) as f:
+            return yaml.safe_load(f)
+    # sensible defaults if no config provided
+    return {
+        "epochs": 50,
+        "batch_size": 32,
+        "lr": 1e-2,
+        "weight_decay": 0.0,
+        "hidden_dim": 16,
+        "seed": 42,
+    }
 
 
-class ReinforceAgent:
-    """Lightweight REINFORCE implementation."""
-
-    def __init__(self, obs_dim: int, act_dim: int, cfg: TrainConfig):
-        self.policy = PolicyNet(obs_dim, act_dim, cfg.hidden_size).to(cfg.device)
-        self.opt = optim.Adam(self.policy.parameters(), lr=cfg.learning_rate)
-        self.cfg = cfg
-        self.device = cfg.device
-
-    def select_action(self, obs: np.ndarray) -> Tuple[int, torch.Tensor]:
-        obs_t = torch.as_tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0)
-        logits = self.policy(obs_t)
-        probs = F.softmax(logits, dim=-1)
-        dist = torch.distributions.Categorical(probs=probs)
-        action = dist.sample()
-        return int(action.item()), dist.log_prob(action)
-
-    def update(self, log_probs: List[torch.Tensor], returns: List[float]):
-        returns_t = torch.tensor(returns, dtype=torch.float32, device=self.device)
-        loss = -torch.sum(torch.stack(log_probs) * returns_t)
-        self.opt.zero_grad()
-        loss.backward()
-        self.opt.step()
+def _set_seed(seed: int) -> None:
+    np.random.seed(seed)
+    torch.manual_seed(seed)
 
 
-# ----------------------------  Train  ------------------------------- #
+# -----------------------------------------------------------------------------
+# Main train function called by src.main
+# -----------------------------------------------------------------------------
 
-def train(cfg_dict: Dict[str, Any]) -> Tuple[nn.Module, pd.DataFrame]:
-    """Main training loop.
+def train() -> Tuple[float, Path]:
+    """Entry point used by src.main.  Returns (final_accuracy, model_path)."""
+    cfg = _load_config()
+    _set_seed(cfg.get("seed", 0))
 
-    Parameters
-    ----------
-    cfg_dict : Dict[str, Any]
-        Parsed YAML configuration.
+    train_npz, test_npz = maybe_prepare_data()  # ensure data present
 
-    Returns
-    -------
-    model : torch.nn.Module
-        The trained policy network.
-    stats : pd.DataFrame
-        Per-episode reward statistics for plotting.
-    """
-    cfg = TrainConfig(**cfg_dict)  # type: ignore[arg-type]
+    X_train = torch.tensor(train_npz["x"], dtype=torch.float32)
+    y_train = torch.tensor(train_npz["y"], dtype=torch.long)
+    X_test = torch.tensor(test_npz["x"], dtype=torch.float32)
+    y_test = torch.tensor(test_npz["y"], dtype=torch.long)
 
-    # --- Seed everything for reproducibility --- #
-    random.seed(cfg.seed)
-    np.random.seed(cfg.seed)
-    torch.manual_seed(cfg.seed)
-    torch.cuda.manual_seed_all(cfg.seed)
+    model = IrisNet(hidden_dim=cfg["hidden_dim"]).to(torch.device("cpu"))
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=cfg["lr"], weight_decay=cfg["weight_decay"])
 
-    env = gym.make(cfg.env_name)
-    obs_dim = env.observation_space.shape[0]
-    act_dim = env.action_space.n  # only discrete envs supported in this tiny demo
+    # mini-batch training
+    losses = []
+    N = X_train.shape[0]
+    batch_size = cfg["batch_size"]
+    epochs = cfg["epochs"]
 
-    agent = ReinforceAgent(obs_dim, act_dim, cfg)
+    for epoch in range(1, epochs + 1):
+        perm = torch.randperm(N)
+        for i in range(0, N, batch_size):
+            idx = perm[i : i + batch_size]
+            batch_x = X_train[idx]
+            batch_y = y_train[idx]
 
-    episode_rewards = []
+            optimizer.zero_grad()
+            logits = model(batch_x)
+            loss = criterion(logits, batch_y)
+            loss.backward()
+            optimizer.step()
+        losses.append(loss.item())
+        if epoch % 10 == 0 or epoch == epochs:
+            print(f"[train] epoch {epoch:>3}/{epochs}  loss={loss.item():.4f}")
 
-    for ep in range(cfg.total_episodes):
-        obs, _ = env.reset(seed=cfg.seed + ep)
-        log_probs, rewards = [], []
-        ep_reward = 0.0
-        for step in range(cfg.max_steps):
-            action, log_prob = agent.select_action(obs)
-            next_obs, reward, terminated, truncated, _ = env.step(action)
-            log_probs.append(log_prob)
-            rewards.append(reward)
-            ep_reward += reward
-            obs = next_obs
-            if terminated or truncated:
-                break
-        # compute discounted returns (future rewards)
-        returns = []
-        G = 0.0
-        for r in reversed(rewards):
-            G = r + cfg.gamma * G
-            returns.insert(0, G)
-        # normalise returns for stability
-        returns = (np.array(returns) - np.mean(returns)) / (np.std(returns) + 1e-8)
-        agent.update(log_probs, list(returns))
-        episode_rewards.append(ep_reward)
-        if (ep + 1) % 50 == 0:
-            print(f"[TRAIN] Episode {ep + 1:4d} | reward = {ep_reward:6.2f}")
+    # Plot training loss
+    plt.figure(figsize=(4, 3))
+    plt.plot(range(1, epochs + 1), losses, marker="o", linewidth=1.5)
+    plt.title("Training loss")
+    plt.xlabel("Epoch")
+    plt.ylabel("Cross-entropy")
+    plt.tight_layout()
+    loss_fig_path = IMAGES_DIR / "training_loss.pdf"
+    plt.savefig(loss_fig_path, bbox_inches="tight")
 
-    env.close()
-    stats = pd.DataFrame({"episode": np.arange(1, cfg.total_episodes + 1),
-                          "reward": episode_rewards})
-    return agent.policy, stats
+    # Save model
+    model_path = MODELS_DIR / "iris_net.pt"
+    torch.save({"model_state": model.state_dict(), "cfg": cfg}, model_path)
+    print(f"[train] model saved to {model_path.resolve()}")
+
+    # quick accuracy on train set (for logging)
+    with torch.no_grad():
+        preds = model(X_test).argmax(dim=1)
+        acc = (preds == y_test).float().mean().item()
+    print(f"[train] test accuracy after training ≈ {acc * 100:.2f}%")
+
+    # store small JSON summary next to model (optional)
+    summary_path = model_path.with_suffix(".json")
+    summary_path.write_text(json.dumps({"accuracy": acc, **cfg}, indent=2))
+
+    return acc, model_path

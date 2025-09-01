@@ -1,6 +1,7 @@
-torch>=2.0
 numpy
+pandas
 matplotlib
 seaborn
-gymnasium
+torch
+scikit-learn
 PyYAML

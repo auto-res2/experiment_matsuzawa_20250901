@@ -1,40 +1,58 @@
 """src/evaluate.py
-Simple evaluation helper that runs a trained policy for several
-episodes and returns the mean reward.
+Evaluate the trained model on the held-out test set and produce a confusion
+matrix figure (PDF).
 """
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Tuple
 
 import numpy as np
 import torch
-import gymnasium as gym
+from sklearn.metrics import confusion_matrix
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from .preprocess import DATA_DIR, maybe_prepare_data, TARGET_NAMES
+from .train import IrisNet, MODELS_DIR, IMAGES_DIR
 
 
-def evaluate(policy: torch.nn.Module, env_name: str, episodes: int = 20, max_steps: int = 200,
-             device: str = "cpu") -> Tuple[float, float]:
-    """Run a trained policy for `episodes` episodes and compute metrics.
+# ----------------------------------------------------------------------------
 
-    Returns
-    -------
-    mean_reward : float
-    std_reward  : float
-    """
-    env = gym.make(env_name)
-    policy.eval()
-    rewards = []
+def evaluate(model_path: Path | None = None) -> Tuple[float, Path]:
+    """Return (accuracy, confusion_matrix_path)."""
+    # ensure data present
+    _, test_npz = maybe_prepare_data()
+    X_test = torch.tensor(test_npz["x"], dtype=torch.float32)
+    y_test = torch.tensor(test_npz["y"], dtype=torch.long)
+
+    if model_path is None:
+        model_path = MODELS_DIR / "iris_net.pt"
+    checkpoint = torch.load(model_path, map_location="cpu")
+
+    model = IrisNet()
+    model.load_state_dict(checkpoint["model_state"])
+    model.eval()
+
     with torch.no_grad():
-        for ep in range(episodes):
-            obs, _ = env.reset(seed=ep)
-            ep_reward = 0.0
-            for _ in range(max_steps):
-                obs_t = torch.as_tensor(obs, dtype=torch.float32, device=device).unsqueeze(0)
-                logits = policy(obs_t)
-                action = torch.argmax(logits, dim=-1).item()
-                obs, reward, terminated, truncated, _ = env.step(action)
-                ep_reward += reward
-                if terminated or truncated:
-                    break
-            rewards.append(ep_reward)
-    env.close()
-    return float(np.mean(rewards)), float(np.std(rewards))
+        preds = model(X_test).argmax(dim=1).numpy()
+        true = y_test.numpy()
+        acc = (preds == true).mean()
+
+    cm = confusion_matrix(true, preds, labels=range(len(TARGET_NAMES)))
+
+    # plot confusion matrix
+    plt.figure(figsize=(4, 3))
+    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", cbar=False,
+                xticklabels=TARGET_NAMES, yticklabels=TARGET_NAMES)
+    plt.xlabel("Predicted")
+    plt.ylabel("True")
+    plt.title("Confusion Matrix")
+    plt.tight_layout()
+    cm_path = IMAGES_DIR / "confusion_matrix.pdf"
+    plt.savefig(cm_path, bbox_inches="tight")
+
+    print(f"[evaluate] accuracy={acc * 100:.2f}%  confusion-matrix saved → {cm_path}")
+    return acc, cm_path
